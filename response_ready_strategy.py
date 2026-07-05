@@ -54,6 +54,7 @@ class TextStabilizationStrategy(ResponseReadyStrategy):
 
 
 class CopyButtonAppearanceStrategy(ResponseReadyStrategy):
+    """Ожидает появления кнопки копирования для блоков кода (старое)"""
     def __init__(self, check_interval: float = 0.5):
         self.check_interval = check_interval
 
@@ -63,7 +64,7 @@ class CopyButtonAppearanceStrategy(ResponseReadyStrategy):
             try:
                 copy_buttons = last_message_element.find_elements(By.CSS_SELECTOR, SELECTORS["copy_button"])
                 if copy_buttons and copy_buttons[0].is_displayed():
-                    return True, "появление кнопки 'Копировать'"
+                    return True, "появление кнопки 'Копировать' (блок кода)"
             except StaleElementReferenceException:
                 try:
                     messages = driver.find_elements(By.XPATH, SELECTORS["assistant_messages"])
@@ -72,9 +73,29 @@ class CopyButtonAppearanceStrategy(ResponseReadyStrategy):
                         continue
                 except:
                     pass
-                return False, "ошибка обновления элемента"
             time.sleep(self.check_interval)
-        return False, "таймаут ожидания кнопки"
+        return False, "таймаут ожидания кнопки (блок кода)"
+
+
+class CopyMessageButtonStrategy(ResponseReadyStrategy):
+    """
+    Ожидает появления кнопки копирования всего сообщения.
+    Использует селектор copy_message_button.
+    """
+    def __init__(self, check_interval: float = 0.5):
+        self.check_interval = check_interval
+
+    def wait(self, driver, last_message_element: WebElement, timeout: float) -> tuple[bool, str]:
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                copy_btn = last_message_element.find_element(By.CSS_SELECTOR, SELECTORS["copy_message_button"])
+                if copy_btn and copy_btn.is_displayed():
+                    return True, "появление кнопки копирования сообщения"
+            except:
+                pass
+            time.sleep(self.check_interval)
+        return False, "таймаут ожидания кнопки копирования сообщения"
 
 
 class SendButtonStateStrategy(ResponseReadyStrategy):
@@ -87,9 +108,7 @@ class SendButtonStateStrategy(ResponseReadyStrategy):
         self.check_interval = check_interval
 
     def _get_send_button(self, driver):
-        """Возвращает элемент кнопки отправки или None."""
         try:
-            # Ищем div[role='button'] с классом ds-button--circle
             buttons = driver.find_elements(By.CSS_SELECTOR, "div[role='button']")
             for btn in buttons:
                 classes = btn.get_attribute("class") or ""
@@ -113,13 +132,10 @@ class SendButtonStateStrategy(ResponseReadyStrategy):
             is_disabled = "ds-button--disabled" in classes
 
             if not disabled_detected:
-                # Ждём, пока кнопка станет disabled (начало генерации)
                 if is_disabled:
                     disabled_detected = True
-                    # После того как disabled появился, ждём его исчезновения
                     continue
             else:
-                # Ждём, пока disabled исчезнет (конец генерации)
                 if not is_disabled:
                     return True, "кнопка отправки стала активной"
 
@@ -132,18 +148,21 @@ class CombinedStrategy(ResponseReadyStrategy):
     """
     Комбинированная стратегия: проверяет несколько условий.
     Порядок:
-    1. Сначала ждём, пока кнопка отправки станет disabled, затем активной – это самый надёжный индикатор.
-    2. Если это не сработало, пробуем стабилизацию текста или появление кнопки 'Копировать'.
+    1. Состояние кнопки отправки (disabled -> enabled).
+    2. Появление кнопки копирования сообщения.
+    3. Стабилизация текста.
     """
     def __init__(self,
                  text_strategy: TextStabilizationStrategy,
                  button_strategy: CopyButtonAppearanceStrategy,
                  send_button_strategy: SendButtonStateStrategy,
+                 copy_message_strategy: CopyMessageButtonStrategy,
                  logger=None,
                  debug_interval: float = 2.0):
         self.text_strategy = text_strategy
         self.button_strategy = button_strategy
         self.send_button_strategy = send_button_strategy
+        self.copy_message_strategy = copy_message_strategy
         self.logger = logger
         self.debug_interval = debug_interval
 
@@ -154,8 +173,7 @@ class CombinedStrategy(ResponseReadyStrategy):
             input_box = driver.find_element(By.CSS_SELECTOR, SELECTORS["input_textarea"])
             value = driver.execute_script("return arguments[0].value;", input_box)
             placeholder = input_box.get_attribute("placeholder")
-            classes = input_box.get_attribute("class")
-            self.logger.log(f"🔍 textarea: value='{value[:50]}...' (len {len(value)}), placeholder='{placeholder}', classes='{classes}'")
+            self.logger.log(f"🔍 textarea: value='{value[:50]}...' (len {len(value)}), placeholder='{placeholder}'")
         except Exception as e:
             self.logger.log(f"🔍 textarea: не найдено ({e})")
 
@@ -166,11 +184,11 @@ class CombinedStrategy(ResponseReadyStrategy):
                 classes = btn.get_attribute("class") or ""
                 if "ds-button--circle" in classes:
                     disabled = "ds-button--disabled" in classes
-                    self.logger.log(f"🔍 send_button: найден с ds-button--circle, disabled={disabled}, classes='{classes}'")
+                    self.logger.log(f"🔍 send_button: disabled={disabled}")
                     found = True
                     break
             if not found:
-                self.logger.log("🔍 send_button: не найден элемент с ds-button--circle")
+                self.logger.log("🔍 send_button: не найден")
         except Exception as e:
             self.logger.log(f"🔍 send_button: ошибка ({e})")
 
@@ -178,39 +196,45 @@ class CombinedStrategy(ResponseReadyStrategy):
         start_time = time.time()
         last_debug_time = start_time
 
-        # Сначала пробуем стратегию по кнопке отправки (она самая надёжная)
+        # 1. Пробуем стратегию по кнопке отправки (самая надёжная)
         ok, reason = self.send_button_strategy.wait(driver, last_message_element, timeout)
         if ok:
             return True, reason
 
-        # Если не сработала, пробуем другие стратегии (стабилизация, кнопка копирования)
-        # Запускаем их параллельно с диагностикой
+        # 2. Пробуем стратегию появления кнопки копирования сообщения
+        remaining = timeout - (time.time() - start_time)
+        if remaining > 0:
+            ok, reason = self.copy_message_strategy.wait(driver, last_message_element, remaining)
+            if ok:
+                return True, reason
+
+        # 3. Пробуем стабилизацию текста + появление кнопки копирования блоков кода
         while time.time() - start_time < timeout:
             if self.logger and (time.time() - last_debug_time) >= self.debug_interval:
                 self._log_element_state(driver)
                 last_debug_time = time.time()
 
-            # Проверяем кнопку копирования
+            # Проверяем кнопку копирования блоков кода
             try:
                 copy_buttons = last_message_element.find_elements(By.CSS_SELECTOR, SELECTORS["copy_button"])
                 if copy_buttons and copy_buttons[0].is_displayed():
-                    # Если кнопка появилась, дополнительно проверяем стабилизацию текста в течение 1 секунды
-                    remaining = timeout - (time.time() - start_time)
-                    if remaining > 0:
-                        check_timeout = min(remaining, 1.0)
+                    # Если кнопка появилась, ждём стабилизации текста 1 секунду
+                    remaining2 = timeout - (time.time() - start_time)
+                    if remaining2 > 0:
+                        check_timeout = min(remaining2, 1.0)
                         ok_stab, reason_stab = self.text_strategy.wait(driver, last_message_element, check_timeout)
                         if ok_stab:
-                            return True, f"кнопка 'Копировать' + стабилизация ({reason_stab})"
+                            return True, f"кнопка 'Копировать' (блок кода) + стабилизация ({reason_stab})"
                         else:
-                            # Если стабилизация не подтвердилась, продолжаем ждать
+                            # если стабилизация не подтвердилась, продолжаем ждать
                             pass
             except:
                 pass
 
             # Проверяем стабилизацию текста
-            remaining = timeout - (time.time() - start_time)
-            if remaining > 0:
-                check_timeout = min(remaining, 0.5)
+            remaining2 = timeout - (time.time() - start_time)
+            if remaining2 > 0:
+                check_timeout = min(remaining2, 0.5)
                 ok, reason = self.text_strategy.wait(driver, last_message_element, check_timeout)
                 if ok:
                     return True, reason
@@ -234,17 +258,24 @@ class ResponseReadyStrategyFactory:
         send_button_strategy = SendButtonStateStrategy(
             check_interval=kwargs.get('check_interval', 0.5)
         )
+        copy_message_strategy = CopyMessageButtonStrategy(
+            check_interval=kwargs.get('check_interval', 0.5)
+        )
+
         if name == "text_stabilization":
             return text_strategy
         elif name == "copy_button":
             return button_strategy
         elif name == "send_button":
             return send_button_strategy
+        elif name == "copy_message":
+            return copy_message_strategy
         elif name == "combined":
             return CombinedStrategy(
                 text_strategy,
                 button_strategy,
                 send_button_strategy,
+                copy_message_strategy,
                 logger=logger,
                 debug_interval=kwargs.get('debug_interval', 2.0)
             )

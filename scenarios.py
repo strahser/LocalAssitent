@@ -164,9 +164,9 @@ class TextScenario(Scenario):
 
             if response is None:
                 self.logger.log(f"❌ Не удалось получить ответ на вопрос {idx}", "ERROR")
-                answers.append(f"Вопрос {idx}:\n{q}\n\nОШИБКА: Не удалось получить ответ\n\n---\n")
+                answers.append(f"## Вопрос {idx}: {q}\n\n### Ответ\n\n{response}\n\n---\n")
             else:
-                answers.append(f"Вопрос {idx}:\n{q}\n\nОтвет:\n{response}\n\n---\n")
+                answers.append(f"## Вопрос {idx}: {q}\n\n### Ответ\n\n{response}\n\n---\n")
                 self.logger.log(f"✅ Ответ на вопрос {idx} получен ({len(response)} символов)")
 
             # Пауза между вопросами, если это не последний

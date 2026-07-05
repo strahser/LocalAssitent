@@ -1,19 +1,19 @@
 # selenium_client.py
-import subprocess
 import time
-from typing import List, Optional
+from typing import Optional, List
 
 from selenium import webdriver
-from selenium.webdriver.edge.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import TimeoutException, StaleElementReferenceException, NoSuchElementException
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.edge.options import Options
 from selenium.webdriver.remote.webelement import WebElement
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 
-from selectors import SELECTORS
+from action_panel_finder import ActionPanelFinder
+from clipboard_manager import ClipboardManager
 from response_ready_strategy import ResponseReadyStrategyFactory
 
 
@@ -22,11 +22,9 @@ class SeleniumDeepSeekClient:
         self.logger = logger
         self.config = config
         self.driver = None
+        self.clipboard = ClipboardManager()
+        self.panel_finder = None
         self._connect()
-
-        self.copy_button_selectors = [
-            self.config.selectors.get("copy_button", "span.ds-button__content span.code-info-button-text")
-        ]
 
     def _connect(self):
         options = Options()
@@ -37,8 +35,7 @@ class SeleniumDeepSeekClient:
             self.logger.log(f"Не удалось подключиться к браузеру: {e}", "ERROR")
             raise
 
-        # Ищем вкладку с DeepSeek
-        target_url = self.config.deepseek_url
+        # Переключаемся на вкладку DeepSeek
         found = False
         for handle in self.driver.window_handles:
             self.driver.switch_to.window(handle)
@@ -49,17 +46,14 @@ class SeleniumDeepSeekClient:
                 break
 
         if not found:
-            # Открываем новую вкладку с нужным URL
             self.logger.log("⚠️ Вкладка DeepSeek не найдена, открываем новую...")
             self.driver.execute_script("window.open('');")
             self.driver.switch_to.window(self.driver.window_handles[-1])
             self.driver.get(self.config.deepseek_url)
             self.logger.log(f"✅ Открыта новая вкладка: {self.driver.current_url}")
 
-        # Фокусируемся на окне
         self.driver.execute_script("window.focus();")
 
-        # Ждём загрузки страницы
         try:
             WebDriverWait(self.driver, 15).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
         except TimeoutException:
@@ -68,18 +62,41 @@ class SeleniumDeepSeekClient:
             raise
 
         self.logger.log(f"✅ Подключено к браузеру. Текущий URL: {self.driver.current_url}")
-
-    def _set_clipboard(self, text):
-        escaped = text.replace('"', '\\"').replace('`', '``')
-        ps_command = f'Set-Clipboard -Value "{escaped}"'
-        subprocess.run(["powershell", "-Command", ps_command], check=True)
+        self.panel_finder = ActionPanelFinder(self.driver, self.config, logger=self.logger)
 
     def _get_assistant_messages(self) -> List[WebElement]:
+        """Возвращает все сообщения ассистента, перебирая альтернативные XPath."""
+        selectors = self.config.selectors.get("assistant_messages", [])
+        if isinstance(selectors, str):
+            selectors = [selectors]
+
+        for xpath in selectors:
+            try:
+                elements = self.driver.find_elements(By.XPATH, xpath)
+                if elements:
+                    self.logger.log(f"✅ Найдено {len(elements)} сообщений по XPath: {xpath}")
+                    # Дополнительно фильтруем: если селектор не специфичен, проверяем классы
+                    if "assistant" not in xpath:
+                        # Если селектор общий, проверим, что это действительно сообщения ассистента
+                        # (можно проверить наличие панели действий, но для простоты оставим как есть)
+                        pass
+                    return elements
+                else:
+                    self.logger.log(f"⚠️ Нет элементов по XPath: {xpath}")
+            except Exception as e:
+                self.logger.log(f"Ошибка при поиске по XPath {xpath}: {e}", "WARNING")
+
+        # Если ничего не найдено, пробуем найти все div с role='article' (может быть структура)
         try:
-            return self.driver.find_elements(By.XPATH, self.config.selectors["assistant_messages"])
-        except Exception as e:
-            self.logger.log(f"Ошибка при поиске сообщений: {e}", "ERROR")
-            return []
+            articles = self.driver.find_elements(By.CSS_SELECTOR, "article")
+            if articles:
+                self.logger.log(f"✅ Найдено {len(articles)} элементов <article> (возможно, сообщения)")
+                return articles
+        except:
+            pass
+
+        self.logger.log("❌ Не удалось найти сообщения ассистента ни по одному селектору.", "ERROR")
+        return []
 
     def _wait_for_input_box(self, timeout=15) -> Optional[WebElement]:
         self.logger.log(f"⏳ Ожидание поля ввода (селектор: {self.config.selectors['input_textarea']})...")
@@ -93,6 +110,9 @@ class SeleniumDeepSeekClient:
         except TimeoutException:
             self.logger.log("❌ Таймаут ожидания поля ввода.", "ERROR")
             return None
+
+    def _set_clipboard(self, text):
+        self.clipboard.set_text(text)
 
     def _insert_text(self, input_box: WebElement, message: str) -> bool:
         self.logger.log("📋 Вставка текста через буфер обмена...")
@@ -124,18 +144,13 @@ class SeleniumDeepSeekClient:
             return False
 
     def _send_message(self, input_box: WebElement) -> bool:
-        """
-        Отправляет сообщение. При ошибке StaleElementReferenceException обновляет input_box и повторяет.
-        """
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
-                # Пытаемся отправить через Enter
                 current_text = self.driver.execute_script("return arguments[0].value;", input_box)
                 self.logger.log("📤 Отправка через Enter...")
                 ActionChains(self.driver).send_keys(Keys.RETURN).perform()
                 time.sleep(1)
-                # Проверяем очистку
                 new_text = self.driver.execute_script("return arguments[0].value;", input_box)
                 if new_text == "":
                     self.logger.log("✅ Поле очистилось, запрос принят.")
@@ -144,16 +159,14 @@ class SeleniumDeepSeekClient:
                     self.logger.log("⚠️ Поле не очистилось после Enter.", "WARNING")
             except StaleElementReferenceException:
                 self.logger.log(f"⚠️ StaleElementReferenceException при отправке, попытка {attempt+1}/{max_attempts}...", "WARNING")
-                # Обновляем input_box
                 input_box = self._wait_for_input_box()
                 if not input_box:
                     return False
                 continue
             except Exception as e:
                 self.logger.log(f"⚠️ Ошибка при Enter: {e}", "WARNING")
-                # пробуем кликнуть по кнопке
 
-            # Запасной вариант: клик по кнопке с ds-button--circle
+            # Запасной вариант: клик по кнопке
             self.logger.log("📤 Попытка клика по кнопке с ds-button--circle...")
             try:
                 buttons = self.driver.find_elements(By.CSS_SELECTOR, "div[role='button']")
@@ -168,7 +181,6 @@ class SeleniumDeepSeekClient:
                             return True
                         else:
                             self.logger.log("⚠️ Поле не очистилось после клика, повторная попытка...", "WARNING")
-                            # пробуем ещё раз кликнуть
                             btn.click()
                             time.sleep(1)
                             new_text = self.driver.execute_script("return arguments[0].value;", input_box)
@@ -193,7 +205,6 @@ class SeleniumDeepSeekClient:
         start = time.time()
         last_log_time = start
         while time.time() - start < timeout:
-            # Логируем состояние кнопки отправки и количество сообщений каждые 5 секунд
             if time.time() - last_log_time >= 5:
                 btn_state = self._get_send_button_state()
                 self.logger.log(f"🔍 Состояние кнопки отправки: {btn_state}")
@@ -207,7 +218,6 @@ class SeleniumDeepSeekClient:
                 self.logger.log(f"✅ Новое сообщение обнаружено! Всего сообщений: {len(messages)}.")
                 return new_message
 
-            # Проверяем, не появились ли ошибки (например, "Something went wrong")
             try:
                 error_elements = self.driver.find_elements(By.XPATH,
                                                            "//div[contains(text(), 'error') or contains(text(), 'Error')]")
@@ -232,6 +242,7 @@ class SeleniumDeepSeekClient:
             return "not found"
         except Exception as e:
             return f"error: {e}"
+
     def _wait_for_response_ready(self, message_element: WebElement, timeout: int) -> bool:
         self.logger.log(f"⏳ Ожидание готовности ответа (стратегия: {self.config.response_strategy})...")
         strategy = ResponseReadyStrategyFactory.get_strategy(
@@ -270,23 +281,66 @@ class SeleniumDeepSeekClient:
         self.logger.log("❌ Не удалось получить текст сообщения.", "ERROR")
         return None
 
+    def _copy_response_via_button(self, message_element: WebElement) -> Optional[str]:
+        self.logger.log("🔍 Поиск кнопки копирования...")
+        # Наводим курсор для активации панели (если она скрыта)
+        try:
+            ActionChains(self.driver).move_to_element(message_element).perform()
+            time.sleep(0.3)
+        except Exception as e:
+            self.logger.log(f"Ошибка при наведении: {e}", "WARNING")
+
+        copy_btn = self.panel_finder.find_copy_button(message_element)
+        if not copy_btn:
+            self.logger.log("❌ Кнопка копирования не найдена.", "ERROR")
+            return None
+
+        if copy_btn.is_displayed() and copy_btn.is_enabled():
+            self.logger.log("✅ Кнопка Копировать найдена и активна.")
+            self.driver.execute_script("arguments[0].scrollIntoView(true);", copy_btn)
+            time.sleep(0.2)
+            copy_btn.click()
+            time.sleep(0.5)
+
+            clipboard_text = self.clipboard.get_text()
+            if clipboard_text:
+                return self._clean_copied_text(clipboard_text)
+            else:
+                self.logger.log("⚠️ Буфер обмена пуст после клика.", "WARNING")
+                # пробуем кликнуть через JS
+                try:
+                    self.driver.execute_script("arguments[0].click();", copy_btn)
+                    time.sleep(0.5)
+                    clipboard_text = self.clipboard.get_text()
+                    if clipboard_text:
+                        return self._clean_copied_text(clipboard_text)
+                except Exception as e:
+                    self.logger.log(f"❌ Повторный клик через JS не удался: {e}", "WARNING")
+                return None
+        else:
+            self.logger.log("❌ Кнопка неактивна/невидима.", "ERROR")
+            return None
+
+    def _clean_copied_text(self, text: str) -> str:
+        """Удаляет строки, содержащие только 'Копировать' или 'Скачать'."""
+        lines = text.splitlines()
+        cleaned = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped in ("Копировать", "Скачать", "python", "bash", "cmd"):
+                continue
+            cleaned.append(line)
+        return "\n".join(cleaned)
+
     def _log_copy_buttons_count(self, prefix: str = ""):
-        for selector in self.copy_button_selectors:
-            try:
-                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                if elements:
-                    self.logger.log(f"{prefix} Найдено {len(elements)} кнопок 'Копировать' по селектору: {selector}")
-                else:
-                    self.logger.log(f"{prefix} Нет кнопок 'Копировать' по селектору: {selector}")
-            except Exception:
-                pass
+        # Оставляем для совместимости, но не используем активно
+        pass
 
     def send_message(self, message: str) -> Optional[str]:
         self.logger.log("📤 Отправка запроса в DeepSeek...")
         messages_before = self._get_assistant_messages()
         count_before = len(messages_before)
         self.logger.log(f"До отправки: {count_before} сообщений ассистента.")
-        self._log_copy_buttons_count("До отправки:")
 
         input_box = self._wait_for_input_box()
         if not input_box:
@@ -298,23 +352,29 @@ class SeleniumDeepSeekClient:
         if not self._send_message(input_box):
             return None
 
-        # Ждём новое сообщение
         new_message = self._wait_for_new_message(count_before, self.config.selenium_timeout)
         if not new_message:
             return None
 
-        # Ждём готовности
         ready = self._wait_for_response_ready(new_message, self.config.stable_timeout)
         if not ready:
-            self.logger.log("⚠️ Ответ не подтверждён как готовый, но попытаемся получить текст.", "WARNING")
+            self.logger.log("⚠️ Ответ не подтверждён как готовый, но попытаемся скопировать.", "WARNING")
 
+        # 1. Копирование через кнопку (чистый Markdown)
+        full_text = self._copy_response_via_button(new_message)
+        if full_text:
+            self.logger.log("✅ Ответ скопирован через буфер обмена.")
+            return full_text
+
+        # 2. Запасной вариант: .text
+        self.logger.log("⚠️ Не удалось скопировать через кнопку, используем .text", "WARNING")
         full_text = self._get_last_message_text()
         if full_text:
-            self.logger.log("✅ Ответ получен.")
+            self.logger.log("✅ Ответ получен через .text.")
             return full_text
-        else:
-            self.logger.log("❌ Не удалось получить текст ответа.", "ERROR")
-            return None
+
+        self.logger.log("❌ Не удалось получить текст ответа.", "ERROR")
+        return None
 
     def new_chat(self):
         self.logger.log("🔄 Создание нового чата (заглушка) ...")
