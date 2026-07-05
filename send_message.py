@@ -1,11 +1,8 @@
-# send_message.py – отправка сообщения в DeepSeek через Selenium, возврат полного ответа
-# Использует буфер обмена для надёжной вставки многострочного текста.
-
 import sys
 import io
 import time
 import subprocess
-import tempfile
+import argparse
 from selenium import webdriver
 from selenium.webdriver.edge.options import Options
 from selenium.webdriver.common.by import By
@@ -13,26 +10,33 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
-from selenium.common.exceptions import StaleElementReferenceException, TimeoutException, NoSuchElementException
+from selenium.common.exceptions import StaleElementReferenceException, TimeoutException
 
-# Кодировка
+try:
+    import config
+    from selectors import SELECTORS
+except ImportError:
+    SELECTORS = {
+        "input_textarea": "textarea[placeholder*='Ask']",
+        "send_button": "button[type='submit']",
+        "copy_button": "span.code-info-button-text",
+        "new_chat_xpath": "//span[text()='New chat']",
+        "assistant_messages": ".//div[contains(@class, 'message') and contains(@class, 'assistant')]",
+    }
+    class config:
+        STREAM_STABLE_TIMEOUT = 30
+        STREAM_STABLE_DURATION = 2.0
+        STREAM_CHECK_INTERVAL = 0.5
+
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
 
-try:
-    import config
-    STABLE_TIMEOUT = getattr(config, 'STREAM_STABLE_TIMEOUT', 30)
-    STABLE_DURATION = getattr(config, 'STREAM_STABLE_DURATION', 2.0)
-    CHECK_INTERVAL = getattr(config, 'STREAM_CHECK_INTERVAL', 0.5)
-except ImportError:
-    STABLE_TIMEOUT = 30
-    STABLE_DURATION = 2.0
-    CHECK_INTERVAL = 0.5
+STABLE_TIMEOUT = getattr(config, 'STREAM_STABLE_TIMEOUT', 30)
+STABLE_DURATION = getattr(config, 'STREAM_STABLE_DURATION', 2.0)
+CHECK_INTERVAL = getattr(config, 'STREAM_CHECK_INTERVAL', 0.5)
 
 def set_clipboard(text):
-    """Устанавливает текст в буфер обмена Windows с использованием PowerShell."""
-    # Экранируем кавычки и специальные символы
     escaped = text.replace('"', '\\"').replace('`', '``')
     ps_command = f'Set-Clipboard -Value "{escaped}"'
     subprocess.run(["powershell", "-Command", ps_command], check=True)
@@ -48,7 +52,7 @@ def wait_for_text_stabilization(driver, parent_element, timeout=STABLE_TIMEOUT,
             current_text = parent_element.text
         except StaleElementReferenceException:
             try:
-                messages = driver.find_elements(By.XPATH, ".//div[contains(@class, 'message') and contains(@class, 'assistant')]")
+                messages = driver.find_elements(By.XPATH, SELECTORS["assistant_messages"])
                 if messages:
                     parent_element = messages[-1]
                     current_text = parent_element.text
@@ -73,63 +77,40 @@ def wait_for_text_stabilization(driver, parent_element, timeout=STABLE_TIMEOUT,
 def send_message_with_retries(driver, message, max_retries=3):
     for attempt in range(max_retries):
         try:
-            # Найти поле ввода
             input_box = WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR,
-                    "textarea[placeholder*='Ask'], textarea._27c9245, textarea"))
+                EC.presence_of_element_located((By.CSS_SELECTOR, SELECTORS["input_textarea"]))
             )
             driver.execute_script("arguments[0].scrollIntoView(true);", input_box)
             time.sleep(0.5)
 
-            # Устанавливаем текст в буфер обмена
             set_clipboard(message)
-
-            # Кликаем в поле и отправляем Ctrl+V (вставка)
             input_box.click()
-            # Очищаем поле (на случай, если там что-то есть)
             input_box.clear()
             time.sleep(0.2)
-            # Вставка через Ctrl+V
             ActionChains(driver).key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL).perform()
             time.sleep(0.5)
 
-            # Проверяем, что текст действительно вставился
             inserted = driver.execute_script("return arguments[0].value;", input_box)
-            if not inserted or len(inserted) < len(message) // 2:  # если текст не вставился полностью
+            if not inserted or len(inserted) < len(message) // 2:
                 sys.stderr.write("WARNING: Вставка через Ctrl+V не сработала, пробуем send_keys.\n")
                 input_box.clear()
                 input_box.send_keys(message)
 
-            # Запоминаем количество кнопок "Копировать"
-            copy_buttons = driver.find_elements(By.CSS_SELECTOR, "span.ds-button__content span.code-info-button-text")
+            copy_buttons = driver.find_elements(By.CSS_SELECTOR, SELECTORS["copy_button"])
             count_before = len(copy_buttons)
 
-            # Отправка: ищем кнопку отправки
-            send_button = None
-            selectors_button = [
-                "button[type='submit']",
-                "button[aria-label*='Send' i]",
-                "button[aria-label*='Отправить' i]",
-                "button.send",
-                "button[class*='send']",
-                "button[class*='submit']"
-            ]
-            for selector in selectors_button:
-                try:
-                    send_button = driver.find_element(By.CSS_SELECTOR, selector)
-                    if send_button.is_enabled():
-                        break
-                except:
-                    continue
-            if send_button and send_button.is_enabled():
-                send_button.click()
-            else:
-                # Имитация Enter через ActionChains (без разбивки)
+            send_selector = SELECTORS.get("send_button", "button[type='submit']")
+            try:
+                send_button = driver.find_element(By.CSS_SELECTOR, send_selector)
+                if send_button.is_enabled():
+                    send_button.click()
+                else:
+                    raise Exception("Send button not enabled")
+            except:
                 ActionChains(driver).send_keys(Keys.RETURN).perform()
 
-            # Ожидание увеличения кнопок "Копировать"
             def copy_count_increased(driver):
-                current = driver.find_elements(By.CSS_SELECTOR, "span.ds-button__content span.code-info-button-text")
+                current = driver.find_elements(By.CSS_SELECTOR, SELECTORS["copy_button"])
                 return len(current) > count_before
 
             try:
@@ -138,8 +119,7 @@ def send_message_with_retries(driver, message, max_retries=3):
                 sys.stderr.write("ERROR: Таймаут ожидания новой кнопки 'Копировать'.\n")
                 return None
 
-            # Найти последнее сообщение ассистента
-            messages = driver.find_elements(By.XPATH, ".//div[contains(@class, 'message') and contains(@class, 'assistant')]")
+            messages = driver.find_elements(By.XPATH, SELECTORS["assistant_messages"])
             if not messages:
                 sys.stderr.write("ERROR: Не найдено сообщений ассистента.\n")
                 return None
@@ -151,7 +131,7 @@ def send_message_with_retries(driver, message, max_retries=3):
             try:
                 full_text = parent.text.strip()
             except StaleElementReferenceException:
-                messages = driver.find_elements(By.XPATH, ".//div[contains(@class, 'message') and contains(@class, 'assistant')]")
+                messages = driver.find_elements(By.XPATH, SELECTORS["assistant_messages"])
                 if messages:
                     parent = messages[-1]
                     full_text = parent.text.strip()
@@ -177,22 +157,40 @@ def send_message_with_retries(driver, message, max_retries=3):
     sys.stderr.write("ERROR: Не удалось получить ответ после нескольких попыток.\n")
     return None
 
-def main():
-    if len(sys.argv) > 1:
-        message = " ".join(sys.argv[1:])
-    else:
-        message = sys.stdin.read().strip()
-        if not message:
-            message = "Привет! Расскажи, как дела?"
+def click_new_chat(driver):
+    try:
+        new_chat_btn = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, SELECTORS["new_chat_xpath"]))
+        )
+        new_chat_btn.click()
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, SELECTORS["input_textarea"]))
+        )
+        return True
+    except Exception as e:
+        sys.stderr.write(f"ERROR: Не удалось создать новый чат: {e}\n")
+        return False
 
+def get_last_assistant_response(driver):
+    try:
+        messages = driver.find_elements(By.XPATH, SELECTORS["assistant_messages"])
+        if not messages:
+            return None
+        last = messages[-1]
+        return last.text.strip()
+    except Exception as e:
+        sys.stderr.write(f"ERROR: Не удалось получить последний ответ: {e}\n")
+        return None
+
+# Основные функции для вызова из других модулей
+def send_message(message, max_retries=3):
     options = Options()
     options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
-
     try:
         driver = webdriver.Edge(options=options)
     except Exception as e:
         sys.stderr.write(f"ERROR: Не удалось подключиться к браузеру: {e}\n")
-        sys.exit(1)
+        return None
 
     if driver.window_handles:
         driver.switch_to.window(driver.window_handles[0])
@@ -203,15 +201,84 @@ def main():
     except TimeoutException:
         sys.stderr.write("ERROR: Страница не загрузилась за 15 секунд.\n")
         driver.quit()
-        sys.exit(1)
+        return None
 
-    result = send_message_with_retries(driver, message)
+    result = send_message_with_retries(driver, message, max_retries)
     driver.quit()
+    return result
 
-    if result is not None:
-        print(result)
+def new_chat():
+    options = Options()
+    options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
+    try:
+        driver = webdriver.Edge(options=options)
+    except Exception as e:
+        sys.stderr.write(f"ERROR: Не удалось подключиться к браузеру: {e}\n")
+        return False
+
+    if driver.window_handles:
+        driver.switch_to.window(driver.window_handles[0])
+    driver.execute_script("window.focus();")
+
+    try:
+        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+    except TimeoutException:
+        sys.stderr.write("ERROR: Страница не загрузилась за 15 секунд.\n")
+        driver.quit()
+        return False
+
+    success = click_new_chat(driver)
+    driver.quit()
+    return success
+
+def copy_last_response():
+    options = Options()
+    options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
+    try:
+        driver = webdriver.Edge(options=options)
+    except Exception as e:
+        sys.stderr.write(f"ERROR: Не удалось подключиться к браузеру: {e}\n")
+        return None
+
+    if driver.window_handles:
+        driver.switch_to.window(driver.window_handles[0])
+    driver.execute_script("window.focus();")
+
+    try:
+        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+    except TimeoutException:
+        sys.stderr.write("ERROR: Страница не загрузилась за 15 секунд.\n")
+        driver.quit()
+        return None
+
+    result = get_last_assistant_response(driver)
+    driver.quit()
+    return result
+
+# Если скрипт запущен напрямую — обрабатываем аргументы командной строки
+def main():
+    # Для обратной совместимости сохраняем поддержку --new-chat и --copy
+    if len(sys.argv) > 1 and sys.argv[1] == "--new-chat":
+        success = new_chat()
+        sys.exit(0 if success else 1)
+    elif len(sys.argv) > 1 and sys.argv[1] == "--copy":
+        result = copy_last_response()
+        if result is not None:
+            print(result)
+            sys.exit(0)
+        else:
+            sys.exit(1)
     else:
-        sys.exit(1)
+        # Если аргументов нет или передан --send (по умолчанию), читаем stdin
+        message = sys.stdin.read().strip()
+        if not message:
+            message = "Привет! Расскажи, как дела?"
+        result = send_message(message)
+        if result is not None:
+            print(result)
+            sys.exit(0)
+        else:
+            sys.exit(1)
 
 if __name__ == "__main__":
     main()

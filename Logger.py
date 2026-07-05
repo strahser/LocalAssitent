@@ -3,12 +3,14 @@ from datetime import datetime
 
 # ------------------- Логгер -------------------
 class Logger:
-    def __init__(self, log_to_html=False, log_to_file=False, save_responses=False):
+    def __init__(self, log_to_html=False, log_to_file=False, save_responses=False,
+                 log_file="assistant.log", html_file="log.html"):
         self.log_to_html = log_to_html
         self.log_to_file = log_to_file
         self.save_responses = save_responses
-        self.html_file = "log.html"
-        self.log_file = "assistant.log"
+        self.html_file = html_file
+        self.log_file = log_file
+
         if self.log_to_html:
             # Очищаем старый HTML при запуске
             with open(self.html_file, "w", encoding="utf-8") as f:

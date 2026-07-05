@@ -8,8 +8,8 @@ import config
 
 #альтеранатива.
 #Start-Process "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" -ArgumentList "--remote-debugging-port=9222",
-# "--user-data-dir=C:\Users\Strakhov\AppData\Local\Microsoft\Edge\User Data", "--start-maximized",
-# "https://chat.deepseek.com/a/chat/s/b4c4c8b6-3288-4279-b6d6-345fd18d2e67"
+# "--user-data-dir={EDGE_USER_DATA_DIR}", "--start-maximized",
+# "{DEEPSEEK_URL}"
 
 def is_port_in_use(port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
