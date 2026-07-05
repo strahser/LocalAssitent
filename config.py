@@ -4,11 +4,9 @@ from selectors import SELECTORS
 
 # ---------- ОБЩИЕ НАСТРОЙКИ ----------
 USER_NAME = os.getlogin()
-DEEPSEEK_URL = "https://chat.deepseek.com/a/chat/s/b4c4c8b6-3288-4279-b6d6-345fd18d2e67"
+DEEPSEEK_URL = "https://chat.deepseek.com/a/chat/s/df0a17e8-235b-47e2-aeca-6a16d65734f0"
 DEBUG_PORT = 9222
 EDGE_USER_DATA_DIR = f"C:\\Users\\{USER_NAME}\\AppData\\Local\\Temp\\EdgeDebugProfile"
-
-SEND_MESSAGE_SCRIPT = "send_message.py"
 
 # ---------- НАСТРОЙКИ ЛОГИРОВАНИЯ ----------
 LOG_TO_HTML = False
