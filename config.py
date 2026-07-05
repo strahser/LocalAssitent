@@ -45,7 +45,7 @@ SCENARIO_CONFIGS = {
         "timeout_script": 30,
         "timeout_deepseek": 180,
         "input_file": "questions.txt",
-        "output_file": "answers.txt",
+        "output_file": "answers.md",
         "create_new_chat": False,
         "delay_between_questions": 5,
         "description": "Обработка вопросов из текстового файла"
@@ -65,9 +65,9 @@ class SeleniumConfig:
                  edge_user_data_dir=EDGE_USER_DATA_DIR,
                  deepseek_url=DEEPSEEK_URL,
                  selenium_timeout=120,          # таймаут ожидания появления новой кнопки
-                 stable_timeout=30,             # таймаут стабилизации
-                 stable_duration=2.0,           # длительность стабильности
-                 check_interval=0.5,            # интервал проверки
+                 stable_timeout=60,             # таймаут стабилизации
+                 stable_duration=2,             # длительность стабильности
+                 check_interval=1,            # интервал проверки
                  response_strategy="combined",  # стратегия определения готовности
                  selectors=None):
         self.debug_port = debug_port
