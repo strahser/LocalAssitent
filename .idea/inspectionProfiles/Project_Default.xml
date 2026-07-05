@@ -1,0 +1,35 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="LanguageDetectionInspection" enabled="false" level="WEAK WARNING" enabled_by_default="false" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="false" level="WARNING" enabled_by_default="false">
+      <option name="ignoredPackages">
+        <list>
+          <option value="PyQt6" />
+          <option value="aiohttp" />
+          <option value="aiofiles" />
+          <option value="httpx" />
+          <option value="beautifulsoup4" />
+          <option value="lxml" />
+          <option value="requests" />
+          <option value="pandas" />
+          <option value="numpy" />
+          <option value="jsonpath-ng" />
+          <option value="fake-useragent" />
+          <option value="selenium" />
+          <option value="webdriver-manager" />
+          <option value="playwright" />
+          <option value="Pillow" />
+          <option value="opencv-python" />
+          <option value="easyocr" />
+          <option value="pytesseract" />
+          <option value="pyautogui" />
+          <option value="pyperclip" />
+          <option value="psutil" />
+          <option value="openpyxl" />
+          <option value="h5py" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>
