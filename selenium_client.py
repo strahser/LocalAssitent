@@ -4,45 +4,31 @@ import time
 from typing import List, Optional
 
 from selenium import webdriver
-from selenium.webdriver.edge.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.keys import Keys
+from selenium.common.exceptions import TimeoutException, StaleElementReferenceException
 from selenium.webdriver.common.action_chains import ActionChains
-from selenium.common.exceptions import (
-    TimeoutException,
-    StaleElementReferenceException,
-    NoSuchElementException
-)
-from selenium.webdriver.remote.webelement import WebElement  # <-- добавлен импорт
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.edge.options import Options
+from selenium.webdriver.remote.webelement import WebElement
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 
-from selectors import SELECTORS
 from response_ready_strategy import ResponseReadyStrategyFactory
 
 
 class SeleniumDeepSeekClient:
-    """
-    Клиент для управления браузером через Selenium и взаимодействия с DeepSeek.
-    """
-
     def __init__(self, logger, config):
         self.logger = logger
         self.config = config
         self.driver = None
         self._connect()
 
-        # Дополнительные селекторы для кнопки копирования (на случай, если основной не работает)
+        # Оставляем только основной селектор для копирования (другие не находились)
         self.copy_button_selectors = [
-            self.config.selectors.get("copy_button", "span.ds-button__content span.code-info-button-text"),
-            "button[aria-label*='Copy' i]",
-            "span[class*='copy']",
-            "button[class*='copy']",
-            "div[class*='copy']",
+            self.config.selectors.get("copy_button", "span.ds-button__content span.code-info-button-text")
         ]
 
     def _connect(self):
-        """Подключается к уже запущенному браузеру с отладкой."""
         options = Options()
         options.add_experimental_option("debuggerAddress", f"127.0.0.1:{self.config.debug_port}")
         try:
@@ -65,38 +51,18 @@ class SeleniumDeepSeekClient:
         self.logger.log(f"✅ Подключено к браузеру. Текущий URL: {self.driver.current_url}")
 
     def _set_clipboard(self, text):
-        """Устанавливает текст в буфер обмена Windows через PowerShell."""
         escaped = text.replace('"', '\\"').replace('`', '``')
         ps_command = f'Set-Clipboard -Value "{escaped}"'
         subprocess.run(["powershell", "-Command", ps_command], check=True)
 
     def _get_assistant_messages(self) -> List[WebElement]:
-        """Возвращает список элементов сообщений ассистента в текущей вкладке."""
         try:
             return self.driver.find_elements(By.XPATH, self.config.selectors["assistant_messages"])
         except Exception as e:
             self.logger.log(f"Ошибка при поиске сообщений: {e}", "ERROR")
             return []
 
-    def _find_elements_by_selectors(self, selectors: List[str], by=By.CSS_SELECTOR) -> List[WebElement]:
-        """
-        Ищет элементы по списку селекторов (CSS или XPath).
-        Возвращает первый найденный набор элементов (непустой).
-        """
-        for selector in selectors:
-            try:
-                elements = self.driver.find_elements(by, selector)
-                if elements:
-                    self.logger.log(f"🔍 Найдено {len(elements)} элементов по селектору: {selector}")
-                    return elements
-                else:
-                    self.logger.log(f"🔍 Нет элементов по селектору: {selector}")
-            except Exception as e:
-                self.logger.log(f"Ошибка при поиске по селектору {selector}: {e}", "WARNING")
-        return []
-
     def _wait_for_input_box(self, timeout=15) -> Optional[WebElement]:
-        """Ожидает появления поля ввода и возвращает его."""
         self.logger.log(f"⏳ Ожидание поля ввода (селектор: {self.config.selectors['input_textarea']})...")
         try:
             input_box = WebDriverWait(self.driver, timeout).until(
@@ -110,7 +76,6 @@ class SeleniumDeepSeekClient:
             return None
 
     def _insert_text(self, input_box: WebElement, message: str) -> bool:
-        """Вставляет текст в поле ввода через буфер обмена или send_keys."""
         self.logger.log("📋 Вставка текста через буфер обмена...")
         try:
             self._set_clipboard(message)
@@ -120,7 +85,6 @@ class SeleniumDeepSeekClient:
             ActionChains(self.driver).key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL).perform()
             time.sleep(0.5)
 
-            # Проверяем, что текст вставлен
             inserted = self.driver.execute_script("return arguments[0].value;", input_box)
             if inserted and len(inserted) >= len(message) // 2:
                 self.logger.log(f"✅ Текст вставлен (длина {len(inserted)} символов).")
@@ -141,24 +105,7 @@ class SeleniumDeepSeekClient:
             return False
 
     def _send_message(self) -> bool:
-        """Отправляет сообщение (клик по кнопке или Enter)."""
-        send_selector = self.config.selectors.get("send_button", "button[type='submit']")
-        self.logger.log(f"📤 Отправка сообщения (селектор: {send_selector})...")
-        try:
-            # Пробуем найти кнопку отправки
-            send_button = self.driver.find_element(By.CSS_SELECTOR, send_selector)
-            if send_button.is_enabled():
-                send_button.click()
-                self.logger.log("✅ Отправлено кликом по кнопке.")
-                return True
-            else:
-                self.logger.log("⚠️ Кнопка отправки не активна, пробуем Enter.", "WARNING")
-        except NoSuchElementException:
-            self.logger.log("⚠️ Кнопка отправки не найдена, пробуем Enter.", "WARNING")
-        except Exception as e:
-            self.logger.log(f"⚠️ Ошибка при клике по кнопке: {e}, пробуем Enter.", "WARNING")
-
-        # Запасной вариант – нажать Enter
+        # Упрощённая отправка – всегда Enter, т.к. кнопка не находится
         try:
             ActionChains(self.driver).send_keys(Keys.RETURN).perform()
             self.logger.log("✅ Отправлено через Enter.")
@@ -168,10 +115,6 @@ class SeleniumDeepSeekClient:
             return False
 
     def _wait_for_new_message(self, old_count: int, timeout: int) -> Optional[WebElement]:
-        """
-        Ожидает появления нового сообщения ассистента.
-        Возвращает элемент нового сообщения или None при таймауте.
-        """
         self.logger.log(f"⏳ Ожидание появления нового сообщения (текущее кол-во: {old_count})...")
         start = time.time()
         while time.time() - start < timeout:
@@ -185,25 +128,23 @@ class SeleniumDeepSeekClient:
         return None
 
     def _wait_for_response_ready(self, message_element: WebElement, timeout: int) -> bool:
-        """
-        Применяет стратегию готовности к последнему сообщению.
-        Возвращает True, если ответ готов, иначе False.
-        """
         self.logger.log(f"⏳ Ожидание готовности ответа (стратегия: {self.config.response_strategy})...")
         strategy = ResponseReadyStrategyFactory.get_strategy(
             self.config.response_strategy,
+            logger=self.logger,  # <-- передаём логгер для диагностики
             check_interval=self.config.check_interval,
-            stable_duration=self.config.stable_duration
+            stable_duration=self.config.stable_duration,
+            debug_interval=2.0  # можно вынести в конфиг
         )
-        ready = strategy.wait(self.driver, message_element, timeout)
+        ready, reason = strategy.wait(self.driver, message_element, timeout)
         if ready:
-            self.logger.log("✅ Ответ готов.")
+            self.logger.log(f"✅ Ответ готов (триггер: {reason}).")
         else:
-            self.logger.log(f"⚠️ Стратегия не подтвердила готовность ответа за {timeout} сек.", "WARNING")
+            self.logger.log(f"⚠️ Стратегия не подтвердила готовность ответа за {timeout} сек. Причина: {reason}",
+                            "WARNING")
         return ready
 
     def _get_last_message_text(self, fallback_retries=2) -> Optional[str]:
-        """Получает текст последнего сообщения ассистента с повторными попытками."""
         for attempt in range(fallback_retries):
             try:
                 messages = self._get_assistant_messages()
@@ -225,7 +166,6 @@ class SeleniumDeepSeekClient:
         return None
 
     def _log_copy_buttons_count(self, prefix: str = ""):
-        """Логирует количество найденных кнопок копирования по всем селекторам."""
         for selector in self.copy_button_selectors:
             try:
                 elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
@@ -237,38 +177,30 @@ class SeleniumDeepSeekClient:
                 pass
 
     def send_message(self, message: str) -> Optional[str]:
-        """Отправляет сообщение и возвращает ответ."""
         self.logger.log("📤 Отправка запроса в DeepSeek...")
-        # Логируем состояние до отправки
         messages_before = self._get_assistant_messages()
         count_before = len(messages_before)
         self.logger.log(f"До отправки: {count_before} сообщений ассистента.")
         self._log_copy_buttons_count("До отправки:")
 
-        # Шаг 1: Ожидание поля ввода
         input_box = self._wait_for_input_box()
         if not input_box:
             return None
 
-        # Шаг 2: Вставка текста
         if not self._insert_text(input_box, message):
             return None
 
-        # Шаг 3: Отправка
         if not self._send_message():
             return None
 
-        # Шаг 4: Ожидание нового сообщения
         new_message = self._wait_for_new_message(count_before, self.config.selenium_timeout)
         if not new_message:
             return None
 
-        # Шаг 5: Ожидание готовности ответа
         ready = self._wait_for_response_ready(new_message, self.config.stable_timeout)
         if not ready:
             self.logger.log("⚠️ Ответ не подтверждён как готовый, но попытаемся получить текст.", "WARNING")
 
-        # Шаг 6: Получение текста
         full_text = self._get_last_message_text()
         if full_text:
             self.logger.log("✅ Ответ получен.")
@@ -278,7 +210,6 @@ class SeleniumDeepSeekClient:
             return None
 
     def new_chat(self):
-        """Создаёт новый чат в текущей вкладке."""
         self.logger.log("🔄 Создание нового чата...")
         try:
             new_chat_btn = WebDriverWait(self.driver, 10).until(
@@ -295,7 +226,6 @@ class SeleniumDeepSeekClient:
             return False
 
     def copy_last_response(self):
-        """Возвращает последний ответ ассистента."""
         self.logger.log("📋 Копирование последнего ответа...")
         try:
             messages = self._get_assistant_messages()
@@ -309,6 +239,5 @@ class SeleniumDeepSeekClient:
             return None
 
     def close(self):
-        """Закрывает драйвер."""
         if self.driver:
             self.driver.quit()

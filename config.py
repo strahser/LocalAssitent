@@ -36,7 +36,7 @@ SCENARIO_CONFIGS = {
     },
     "text": {
         "prompt_template": (
-            "Ответь на вопрос максимально кратко в формате markdown "
+            "Ответь на вопрос подробно и структурированно в формате markdown "
         ),
         "response_mode": "full",
         "extractor_type": None,

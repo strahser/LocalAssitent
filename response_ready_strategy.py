@@ -3,35 +3,22 @@ import time
 from abc import ABC, abstractmethod
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import StaleElementReferenceException, TimeoutException
+from selenium.common.exceptions import StaleElementReferenceException
 from selectors import SELECTORS
 
 
 class ResponseReadyStrategy(ABC):
-    """Абстрактная стратегия определения готовности ответа."""
-
     @abstractmethod
-    def wait(self, driver, last_message_element: WebElement, timeout: float) -> bool:
-        """
-        Ожидает готовности ответа.
-        :param driver: экземпляр WebDriver
-        :param last_message_element: элемент последнего сообщения ассистента
-        :param timeout: максимальное время ожидания
-        :return: True, если ответ готов, иначе False
-        """
+    def wait(self, driver, last_message_element: WebElement, timeout: float) -> tuple[bool, str]:
         pass
 
 
 class TextStabilizationStrategy(ResponseReadyStrategy):
-    """
-    Стратегия по стабилизации текста: ждёт, пока текст в последнем сообщении перестанет меняться.
-    """
-
     def __init__(self, check_interval: float = 0.5, stable_duration: float = 2.0):
         self.check_interval = check_interval
         self.stable_duration = stable_duration
 
-    def wait(self, driver, last_message_element: WebElement, timeout: float) -> bool:
+    def wait(self, driver, last_message_element: WebElement, timeout: float) -> tuple[bool, str]:
         start_time = time.time()
         stable_counter = 0.0
         last_text = None
@@ -39,16 +26,15 @@ class TextStabilizationStrategy(ResponseReadyStrategy):
             try:
                 current_text = last_message_element.text
             except StaleElementReferenceException:
-                # Если элемент устарел, пытаемся найти последнее сообщение заново
                 try:
                     messages = driver.find_elements(By.XPATH, SELECTORS["assistant_messages"])
                     if messages:
                         last_message_element = messages[-1]
                         current_text = last_message_element.text
                     else:
-                        return False
+                        return False, "Сообщения не найдены"
                 except:
-                    return False
+                    return False, "Ошибка при обновлении элемента"
 
             if last_text is None:
                 last_text = current_text
@@ -62,29 +48,23 @@ class TextStabilizationStrategy(ResponseReadyStrategy):
                 last_text = current_text
 
             if stable_counter >= self.stable_duration:
-                return True
+                return True, "стабилизация текста"
             time.sleep(self.check_interval)
-        return False
+        return False, "таймаут стабилизации"
 
 
 class CopyButtonAppearanceStrategy(ResponseReadyStrategy):
-    """
-    Стратегия по появлению кнопки «Копировать» в последнем сообщении.
-    """
-
     def __init__(self, check_interval: float = 0.5):
         self.check_interval = check_interval
 
-    def wait(self, driver, last_message_element: WebElement, timeout: float) -> bool:
+    def wait(self, driver, last_message_element: WebElement, timeout: float) -> tuple[bool, str]:
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
-                # Ищем кнопку копирования внутри сообщения
                 copy_buttons = last_message_element.find_elements(By.CSS_SELECTOR, SELECTORS["copy_button"])
                 if copy_buttons and copy_buttons[0].is_displayed():
-                    return True
+                    return True, "появление кнопки 'Копировать'"
             except StaleElementReferenceException:
-                # Если элемент устарел, перезапрашиваем последнее сообщение
                 try:
                     messages = driver.find_elements(By.XPATH, SELECTORS["assistant_messages"])
                     if messages:
@@ -92,72 +72,96 @@ class CopyButtonAppearanceStrategy(ResponseReadyStrategy):
                         continue
                 except:
                     pass
-                return False
+                return False, "ошибка обновления элемента"
             time.sleep(self.check_interval)
-        return False
+        return False, "таймаут ожидания кнопки"
 
 
 class CombinedStrategy(ResponseReadyStrategy):
-    """
-    Комбинированная стратегия: ждёт либо стабилизации текста, либо появления кнопки.
-    """
-
     def __init__(self,
                  text_strategy: TextStabilizationStrategy,
-                 button_strategy: CopyButtonAppearanceStrategy):
+                 button_strategy: CopyButtonAppearanceStrategy,
+                 logger=None,
+                 debug_interval: float = 2.0):
         self.text_strategy = text_strategy
         self.button_strategy = button_strategy
+        self.logger = logger
+        self.debug_interval = debug_interval
 
-    def wait(self, driver, last_message_element: WebElement, timeout: float) -> bool:
-        # Запускаем обе стратегии параллельно или последовательно? Для простоты попробуем сначала кнопку, потом текст.
-        # Но можно и комбинировать: ждём до timeout, проверяя оба условия.
+    def _log_element_state(self, driver):
+        """Логирует состояние textarea и кнопки отправки для диагностики."""
+        if not self.logger:
+            return
+
+        # Поле ввода
+        try:
+            input_box = driver.find_element(By.CSS_SELECTOR, SELECTORS["input_textarea"])
+            value = driver.execute_script("return arguments[0].value;", input_box)
+            placeholder = input_box.get_attribute("placeholder")
+            classes = input_box.get_attribute("class")
+            self.logger.log(f"🔍 textarea: value='{value[:50]}...' (length {len(value)}), placeholder='{placeholder}', classes='{classes}'")
+        except Exception as e:
+            self.logger.log(f"🔍 textarea: не найдено ({e})")
+
+        # Кнопка отправки (используем основной селектор)
+        try:
+            send_btn = driver.find_element(By.CSS_SELECTOR, SELECTORS["send_button"])
+            classes = send_btn.get_attribute("class")
+            is_circle = "ds-button--circle" in classes if classes else False
+            self.logger.log(f"🔍 send_button: classes='{classes}', is_circle={is_circle}")
+        except Exception as e:
+            self.logger.log(f"🔍 send_button: не найдено ({e})")
+
+    def wait(self, driver, last_message_element: WebElement, timeout: float) -> tuple[bool, str]:
         start_time = time.time()
+        last_debug_time = start_time
+
+        # Сначала пробуем кнопку + стабилизацию параллельно
         while time.time() - start_time < timeout:
-            # Проверяем кнопку
+            # Диагностика каждые debug_interval секунд
+            if self.logger and (time.time() - last_debug_time) >= self.debug_interval:
+                self._log_element_state(driver)
+                last_debug_time = time.time()
+
+            # Проверяем кнопку копирования
             try:
                 copy_buttons = last_message_element.find_elements(By.CSS_SELECTOR, SELECTORS["copy_button"])
                 if copy_buttons and copy_buttons[0].is_displayed():
-                    return True
+                    return True, "появление кнопки 'Копировать'"
             except:
                 pass
-            # Проверяем стабильность (используем короткий интервал)
-            # Здесь можно вызвать упрощённую проверку, но для простоты используем текст-стратегию с маленьким таймаутом
-            # Но проще: попробуем вызвать wait с таймаутом 0.1? Нет, лучше отдельно.
-            # Для простоты сделаем последовательно: сначала кнопка, потом текст.
-            # Но можем просто вернуть результат одной из них, но лучше комбинировать.
-            # Реализуем: проверяем стабильность с малым временем.
-            # Используем внутренний метод для проверки стабильности за короткий интервал.
-            # Однако, чтобы не усложнять, просто вернём результат от первой успешной.
-            # Можно сделать так: если кнопка появилась – готово, иначе ждём стабилизации.
-            # Поэтому в этом цикле сначала проверяем кнопку, если нет – ждём чек-интервал.
+
+            # Проверяем стабилизацию текста (с коротким таймаутом, чтобы не задерживать)
+            # Используем метод text_strategy.wait с таймаутом 0.5 сек для быстрой проверки
+            remaining = timeout - (time.time() - start_time)
+            if remaining > 0:
+                check_timeout = min(remaining, 0.5)
+                ok, reason = self.text_strategy.wait(driver, last_message_element, check_timeout)
+                if ok:
+                    return True, reason
+
             time.sleep(0.2)
-        # После timeout пробуем текстовую стабилизацию как запасной вариант
-        return self.text_strategy.wait(driver, last_message_element, timeout=5)  # короткий запасной таймаут
+
+        # Запасной вариант – полная стабилизация
+        return self.text_strategy.wait(driver, last_message_element, timeout=5)
 
 
 class ResponseReadyStrategyFactory:
-    """
-    Фабрика для создания стратегий по имени.
-    """
     @staticmethod
-    def get_strategy(name: str, **kwargs):
+    def get_strategy(name: str, logger=None, **kwargs):
+        text_strategy = TextStabilizationStrategy(
+            check_interval=kwargs.get('check_interval', 0.5),
+            stable_duration=kwargs.get('stable_duration', 2.0)
+        )
+        button_strategy = CopyButtonAppearanceStrategy(
+            check_interval=kwargs.get('check_interval', 0.5)
+        )
         if name == "text_stabilization":
-            return TextStabilizationStrategy(
-                check_interval=kwargs.get('check_interval', 0.5),
-                stable_duration=kwargs.get('stable_duration', 2.0)
-            )
+            return text_strategy
         elif name == "copy_button":
-            return CopyButtonAppearanceStrategy(
-                check_interval=kwargs.get('check_interval', 0.5)
-            )
+            return button_strategy
         elif name == "combined":
-            text_strategy = TextStabilizationStrategy(
-                check_interval=kwargs.get('check_interval', 0.5),
-                stable_duration=kwargs.get('stable_duration', 2.0)
-            )
-            button_strategy = CopyButtonAppearanceStrategy(
-                check_interval=kwargs.get('check_interval', 0.5)
-            )
-            return CombinedStrategy(text_strategy, button_strategy)
+            return CombinedStrategy(text_strategy, button_strategy, logger=logger,
+                                    debug_interval=kwargs.get('debug_interval', 2.0))
         else:
             raise ValueError(f"Неизвестная стратегия: {name}")

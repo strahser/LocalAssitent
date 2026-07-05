@@ -13,16 +13,8 @@ class DeepSeekClient:
         # Создаём Selenium-клиент с настройками из SELENIUM_CONFIG
         self.selenium_client = SeleniumDeepSeekClient(logger, SELENIUM_CONFIG)
 
-    def _run_script(self, args, input_text=None):
-        # Этот метод больше не нужен, так как мы используем прямой вызов selenium_client
-        # Но для обратной совместимости оставим заглушку или перенаправим
-        # Однако в текущей архитектуре вызовы идут напрямую к selenium_client
-        # Поэтому переопределим методы send_prompt, new_chat, copy_response
-        pass
-
     def send_prompt(self, prompt):
         """Отправляет промпт и возвращает ответ."""
-        self.logger.log("📤 Отправка запроса в DeepSeek...")
         return self.selenium_client.send_message(prompt)
 
     def new_chat(self):
