@@ -1,3 +1,4 @@
+# scenarios.py
 import config
 from extractors import ExtractorFactory
 from rules import RuleProcessor
@@ -135,51 +136,57 @@ class TextScenario(Scenario):
         self.create_new_chat = cfg.get("create_new_chat", False)
         self.delay = cfg.get("delay_between_questions", 1)
 
-    def run(self):
-        self.logger.log("🚀 Запуск сценария: Text")
-        try:
-            with open(self.input_file, 'r', encoding='utf-8') as f:
-                questions = [line.strip() for line in f if line.strip()]
-        except FileNotFoundError:
-            self.logger.log(f"❌ Файл {self.input_file} не найден", "ERROR")
-            return False
-        if not questions:
-            self.logger.log("❌ Файл с вопросами пуст", "ERROR")
-            return False
 
-        self.logger.log(f"📖 Найдено {len(questions)} вопросов")
-        answers = []
+def run(self):
+    self.logger.log("🚀 Запуск сценария: Text")
+    try:
+        with open(self.input_file, 'r', encoding='utf-8') as f:
+            questions = [line.strip() for line in f if line.strip()]
+    except FileNotFoundError:
+        self.logger.log(f"❌ Файл {self.input_file} не найден", "ERROR")
+        return False
+    if not questions:
+        self.logger.log("❌ Файл с вопросами пуст", "ERROR")
+        return False
 
-        for idx, q in enumerate(questions, 1):
-            self.logger.log(f"📝 Вопрос {idx}/{len(questions)}: {q[:50]}...")
+    self.logger.log(f"📖 Найдено {len(questions)} вопросов")
 
-            if self.create_new_chat:
-                self.logger.log("🔄 Создание нового чата...")
-                self.client.new_chat()
-                # Даём время на создание чата
-                time.sleep(1)
+    # Очищаем выходной файл перед началом
+    with open(self.output_file, 'w', encoding='utf-8') as f:
+        f.write("")  # создаём/очищаем
 
-            prompt = f"{self.prompt_template}\n\n{q}"
-            response = self.client.send_prompt(prompt)
+    for idx, q in enumerate(questions, 1):
+        self.logger.log(f"📝 Вопрос {idx}/{len(questions)}: {q[:50]}...")
 
-            if response is None:
-                self.logger.log(f"❌ Не удалось получить ответ на вопрос {idx}", "ERROR")
-                answers.append(f"## Вопрос {idx}: {q}\n\n### Ответ\n\n{response}\n\n---\n")
-            else:
-                answers.append(f"## Вопрос {idx}: {q}\n\n### Ответ\n\n{response}\n\n---\n")
-                self.logger.log(f"✅ Ответ на вопрос {idx} получен ({len(response)} символов)")
+        if self.create_new_chat:
+            self.logger.log("🔄 Создание нового чата...")
+            self.client.new_chat()
+            time.sleep(1)
 
-            # Пауза между вопросами, если это не последний
-            if idx < len(questions) and self.delay > 0:
-                self.logger.log(f"⏳ Пауза {self.delay} сек перед следующим вопросом...")
-                time.sleep(self.delay)
+        prompt = f"{self.prompt_template}\n\n{q}"
+        response = self.client.send_prompt(prompt)
 
-        with open(self.output_file, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(answers))
+        # Формируем блок для записи
+        if response is None:
+            self.logger.log(f"❌ Не удалось получить ответ на вопрос {idx}", "ERROR")
+            block = f"## Вопрос {idx}: {q}\n\n### Ответ\n\n*Ошибка получения ответа*\n\n---\n"
+        else:
+            self.logger.log(f"✅ Ответ на вопрос {idx} получен ({len(response)} символов)")
+            block = f"## Вопрос {idx}: {q}\n\n### Ответ\n\n{response}\n\n---\n"
 
-        self.logger.log(f"✅ Все ответы сохранены в {self.output_file}", "SUCCESS")
-        return True
+        # Немедленная запись в файл с принудительным сбросом буфера
+        with open(self.output_file, 'a', encoding='utf-8') as f:
+            f.write(block)
+            f.flush()  # принудительная запись на диск
+            self.logger.log(f"💾 Вопрос {idx} сохранён в {self.output_file}")
 
+        # Пауза между вопросами, если не последний
+        if idx < len(questions) and self.delay > 0:
+            self.logger.log(f"⏳ Пауза {self.delay} сек перед следующим вопросом...")
+            time.sleep(self.delay)
+
+    self.logger.log(f"✅ Все ответы сохранены в {self.output_file}", "SUCCESS")
+    return True
 
 class ScenarioFactory:
     @staticmethod
