@@ -1,6 +1,6 @@
 import sys
 import config
-from DeepSeekClient import DeepSeekClient
+import DeepSeekClient
 from Logger import Logger
 from scenarios import ScenarioFactory
 
@@ -18,7 +18,7 @@ def main():
     scenario_cfg = config.SCENARIO_CONFIGS.get(config.SCENARIO, {})
     timeout = scenario_cfg.get("timeout_deepseek", 180)
 
-    client = DeepSeekClient(logger, timeout=timeout)
+    client = DeepSeekClient.DeepSeekClient(logger, timeout=timeout)
     scenario = ScenarioFactory.get_scenario(config.SCENARIO, logger)
     scenario.set_client(client)
 

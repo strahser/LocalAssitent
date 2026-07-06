@@ -1,9 +1,13 @@
+# clipboard_manager.py
 import win32clipboard
 import win32con
 
 class ClipboardManager:
+    """Управление буфером обмена Windows через win32clipboard."""
+
     @staticmethod
     def get_text() -> str:
+        """Получает текст из буфера обмена в Unicode."""
         try:
             win32clipboard.OpenClipboard()
             if win32clipboard.IsClipboardFormatAvailable(win32con.CF_UNICODETEXT):
@@ -18,6 +22,7 @@ class ClipboardManager:
 
     @staticmethod
     def set_text(text: str) -> bool:
+        """Устанавливает текст в буфер обмена."""
         try:
             win32clipboard.OpenClipboard()
             win32clipboard.EmptyClipboard()

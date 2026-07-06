@@ -1,3 +1,4 @@
+# custom_selectors.py
 SELECTORS = {
     "input_textarea": "textarea[placeholder*='Ask'], textarea",
     "send_button": "div[role='button']",

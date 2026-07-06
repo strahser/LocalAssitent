@@ -61,35 +61,14 @@ def main():
         except Exception as e:
             logger.log(f"Ошибка при поиске по XPath {xpath}: {e}", "WARNING")
 
-    # Если сообщений нет, пробуем найти все article
-    if not messages:
-        try:
-            articles = driver.find_elements(By.CSS_SELECTOR, "article")
-            if articles:
-                logger.log(f"✅ Найдено {len(articles)} элементов <article>")
-                messages.extend(articles)
-        except:
-            pass
-
     if not messages:
         logger.log("❌ Не найдено ни одного сообщения.", "ERROR")
         driver.quit()
         sys.exit(1)
 
-    # Выводим тексты всех найденных сообщений для отладки
-    logger.log(f"🔍 Найдено {len(messages)} кандидатов в сообщения:")
-    for idx, msg in enumerate(messages):
-        try:
-            text = msg.text.strip()
-            # Обрезаем длинные тексты
-            preview = text[:100] + "..." if len(text) > 100 else text
-            logger.log(f"  [{idx}] {preview}")
-        except:
-            logger.log(f"  [{idx}] (не удалось получить текст)")
-
-    # Берём последнее сообщение (предполагаем, что это последний ответ)
+    # Берём последнее сообщение
     last_msg = messages[-1]
-    logger.log(f"✅ Выбрано последнее сообщение (индекс {len(messages) - 1}).")
+    logger.log(f"✅ Выбрано последнее сообщение (всего кандидатов: {len(messages)}).")
 
     # Наводим курсор
     try:
@@ -98,7 +77,7 @@ def main():
     except Exception as e:
         logger.log(f"Ошибка при наведении: {e}", "WARNING")
 
-    # Используем ActionPanelFinder с логгером
+    # Используем ActionPanelFinder
     panel_finder = ActionPanelFinder(driver, SELENIUM_CONFIG, logger=logger)
     copy_btn = panel_finder.find_copy_button(last_msg)
     if not copy_btn:
