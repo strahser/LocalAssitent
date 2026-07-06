@@ -7,13 +7,11 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.common.action_chains import ActionChains
 
 from Logger import Logger
 from config import SELENIUM_CONFIG, DEBUG_PORT
-from clipboard_manager import ClipboardManager
-from action_panel_finder import ActionPanelFinder
-
+from message_finder import MessageFinder
+from response_copier import ResponseCopier
 
 def main():
     logger = Logger(log_to_file=True, log_to_html=False, save_responses=False)
@@ -46,65 +44,29 @@ def main():
         driver.quit()
         sys.exit(1)
 
-    # Ищем сообщения ассистента
-    selectors = SELENIUM_CONFIG.selectors.get("assistant_messages", [])
-    if isinstance(selectors, str):
-        selectors = [selectors]
-
-    messages = []
-    for xpath in selectors:
-        try:
-            elements = driver.find_elements(By.XPATH, xpath)
-            if elements:
-                logger.log(f"✅ Найдено {len(elements)} сообщений по XPath: {xpath}")
-                messages.extend(elements)
-        except Exception as e:
-            logger.log(f"Ошибка при поиске по XPath {xpath}: {e}", "WARNING")
-
-    if not messages:
+    # Используем MessageFinder для поиска последнего сообщения
+    message_finder = MessageFinder(driver, SELENIUM_CONFIG, logger=logger)
+    last_msg = message_finder.get_last_assistant_message()
+    if not last_msg:
         logger.log("❌ Не найдено ни одного сообщения.", "ERROR")
         driver.quit()
         sys.exit(1)
 
-    # Берём последнее сообщение
-    last_msg = messages[-1]
-    logger.log(f"✅ Выбрано последнее сообщение (всего кандидатов: {len(messages)}).")
+    logger.log(f"✅ Выбрано последнее сообщение.")
 
-    # Наводим курсор
-    try:
-        ActionChains(driver).move_to_element(last_msg).perform()
-        time.sleep(0.3)
-    except Exception as e:
-        logger.log(f"Ошибка при наведении: {e}", "WARNING")
-
-    # Используем ActionPanelFinder
-    panel_finder = ActionPanelFinder(driver, SELENIUM_CONFIG, logger=logger)
-    copy_btn = panel_finder.find_copy_button(last_msg)
-    if not copy_btn:
-        logger.log("❌ Кнопка копирования не найдена.", "ERROR")
-        driver.quit()
-        sys.exit(1)
-
-    if copy_btn.is_displayed() and copy_btn.is_enabled():
-        logger.log("✅ Кнопка Копировать найдена и активна.")
-        driver.execute_script("arguments[0].scrollIntoView(true);", copy_btn)
-        time.sleep(0.2)
-        copy_btn.click()
-        time.sleep(0.5)
-        text = ClipboardManager.get_text()
-        if text:
-            logger.log(f"✅ Текст скопирован (длина {len(text)} символов).")
-            print("\n--- СКОПИРОВАННЫЙ ТЕКСТ ---\n")
-            print(text)
-            print("\n--- КОНЕЦ ТЕКСТА ---\n")
-        else:
-            logger.log("⚠️ Буфер обмена пуст после клика.", "WARNING")
+    # Копируем через ResponseCopier
+    copier = ResponseCopier(driver, SELENIUM_CONFIG, logger=logger)
+    text = copier.copy_from_element(last_msg)
+    if text:
+        logger.log(f"✅ Текст скопирован (длина {len(text)} символов).")
+        print("\n--- СКОПИРОВАННЫЙ ТЕКСТ ---\n")
+        print(text)
+        print("\n--- КОНЕЦ ТЕКСТА ---\n")
     else:
-        logger.log("❌ Кнопка неактивна/невидима.", "ERROR")
+        logger.log("❌ Не удалось скопировать текст.", "ERROR")
 
     driver.quit()
     logger.close()
-
 
 if __name__ == "__main__":
     main()

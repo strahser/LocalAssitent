@@ -1,6 +1,8 @@
 # response_ready_strategy.py
 import time
 from abc import ABC, abstractmethod
+from typing import Optional
+
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import StaleElementReferenceException
@@ -120,8 +122,6 @@ class SendButtonStateStrategy(ResponseReadyStrategy):
         return False, "таймаут ожидания состояния кнопки"
 
 
-
-
 class ActionPanelStrategy(ResponseReadyStrategy):
     def __init__(self, driver, config, check_interval: float = 1.0, logger=None):
         self.driver = driver
@@ -170,40 +170,87 @@ class ActionPanelStrategy(ResponseReadyStrategy):
         return False, "таймаут ожидания панели"
 
 
+class PanelCountStrategy(ResponseReadyStrategy):
+    def __init__(self, driver, config, check_interval: float = 30.0, logger=None):
+        self.driver = driver
+        self.config = config
+        self.check_interval = check_interval
+        self.logger = logger
+
+    def _count_panels(self) -> int:
+        # XPath ищет div.ds-flex, не внутри блоков кода, с ровно 5 кнопками
+        xpath = ".//div[contains(@class, 'ds-flex') and not(ancestor::*[contains(@class, 'code') or contains(@class, 'highlight')]) and count(./div[@role='button']) = 5]"
+        try:
+            elements = self.driver.find_elements(By.XPATH, xpath)
+            return len(elements)
+        except Exception as e:
+            if self.logger:
+                self.logger.log(f"Ошибка подсчета панелей: {e}", "WARNING")
+            return 0
+
+    def wait(self, driver, last_message_element: WebElement, timeout: float) -> tuple[bool, str]:
+        if self.logger:
+            self.logger.log(f"⏳ Ожидание увеличения количества панелей с 5 кнопками (интервал {self.check_interval} сек)...")
+        initial_count = self._count_panels()
+        if self.logger:
+            self.logger.log(f"Начальное количество панелей: {initial_count}")
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            time.sleep(self.check_interval)
+            current_count = self._count_panels()
+            if current_count > initial_count:
+                if self.logger:
+                    self.logger.log(f"✅ Количество панелей увеличилось до {current_count} (было {initial_count}).")
+                return True, f"увеличение количества панелей до {current_count}"
+            else:
+                if self.logger:
+                    self.logger.log(f"Количество панелей: {current_count} (ожидается > {initial_count})")
+        return False, f"таймаут ожидания увеличения панелей (было {initial_count}, осталось {current_count})"
+
+
 class CombinedStrategy(ResponseReadyStrategy):
     def __init__(self,
                  text_strategy: TextStabilizationStrategy,
                  button_strategy: CopyButtonAppearanceStrategy,
                  send_button_strategy: SendButtonStateStrategy,
                  action_panel_strategy: ActionPanelStrategy,
+                 panel_count_strategy: Optional[PanelCountStrategy] = None,
                  logger=None,
                  debug_interval: float = 2.0):
         self.text_strategy = text_strategy
         self.button_strategy = button_strategy
         self.send_button_strategy = send_button_strategy
         self.action_panel_strategy = action_panel_strategy
+        self.panel_count_strategy = panel_count_strategy
         self.logger = logger
         self.debug_interval = debug_interval
 
     def wait(self, driver, last_message_element: WebElement, timeout: float) -> tuple[bool, str]:
         start_time = time.time()
-        last_debug_time = start_time
 
-        # 1. Самая надёжная стратегия – панель с 5 кнопками
-        ok, reason = self.action_panel_strategy.wait(driver, last_message_element, timeout)
-        if ok:
-            return True, reason
+        # 1. Самая надёжная стратегия – увеличение количества панелей с 5 кнопками
+        if self.panel_count_strategy:
+            ok, reason = self.panel_count_strategy.wait(driver, last_message_element, timeout)
+            if ok:
+                return True, reason
 
-        # 2. Кнопка отправки (disabled -> enabled)
+        # 2. Панель с 5 кнопками (поиск внутри конкретного сообщения)
+        remaining = timeout - (time.time() - start_time)
+        if remaining > 0:
+            ok, reason = self.action_panel_strategy.wait(driver, last_message_element, remaining)
+            if ok:
+                return True, reason
+
+        # 3. Кнопка отправки (disabled -> enabled)
         remaining = timeout - (time.time() - start_time)
         if remaining > 0:
             ok, reason = self.send_button_strategy.wait(driver, last_message_element, remaining)
             if ok:
                 return True, reason
 
-        # 3. Стабилизация текста + кнопка копирования блоков кода
+        # 4. Стабилизация текста + кнопка копирования (для блоков кода)
         while time.time() - start_time < timeout:
-            # Проверяем кнопку копирования блоков кода
+            # Проверяем кнопку копирования в блоке кода
             try:
                 copy_buttons = last_message_element.find_elements(By.CSS_SELECTOR, SELECTORS["copy_button"])
                 if copy_buttons and copy_buttons[0].is_displayed():
@@ -226,12 +273,14 @@ class CombinedStrategy(ResponseReadyStrategy):
 
             time.sleep(0.2)
 
+        # Финальный fallback – ещё раз попробовать стабилизацию
         return self.text_strategy.wait(driver, last_message_element, timeout=5)
 
 
 class ResponseReadyStrategyFactory:
     @staticmethod
     def get_strategy(name: str, driver=None, config=None, logger=None, **kwargs):
+        # Базовые стратегии
         text_strategy = TextStabilizationStrategy(
             check_interval=kwargs.get('check_interval', 1.0),
             stable_duration=kwargs.get('stable_duration', 2.0)
@@ -248,6 +297,12 @@ class ResponseReadyStrategyFactory:
             check_interval=kwargs.get('check_interval', 1.0),
             logger=logger
         )
+        panel_count_strategy = PanelCountStrategy(
+            driver=driver,
+            config=config,
+            check_interval=kwargs.get('panel_check_interval', 30.0),
+            logger=logger
+        )
 
         if name == "text_stabilization":
             return text_strategy
@@ -257,12 +312,15 @@ class ResponseReadyStrategyFactory:
             return send_button_strategy
         elif name == "action_panel":
             return action_panel_strategy
+        elif name == "panel_count":
+            return panel_count_strategy
         elif name == "combined":
             return CombinedStrategy(
                 text_strategy,
                 button_strategy,
                 send_button_strategy,
                 action_panel_strategy,
+                panel_count_strategy=panel_count_strategy,
                 logger=logger,
                 debug_interval=kwargs.get('debug_interval', 2.0)
             )

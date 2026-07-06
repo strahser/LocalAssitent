@@ -58,9 +58,9 @@ class SeleniumConfig:
                  deepseek_url=DEEPSEEK_URL,
                  selenium_timeout=300,
                  stable_timeout=120,
-                 stable_duration=2,
-                 check_interval=1.0,
-                 response_strategy="combined",
+                 stable_duration=5,
+                 check_interval=20.0,
+                 response_strategy="panel_count",
                  selectors=None):
         self.debug_port = debug_port
         self.edge_user_data_dir = edge_user_data_dir
