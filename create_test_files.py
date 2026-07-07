@@ -1,0 +1,239 @@
+#!/usr/bin/env python3
+import shutil
+from pathlib import Path
+
+FIXED_TEST_CONTENT = '''import os
+import copy
+from pathlib import Path
+from config.pipeline_configs import TEXT_PIPELINE
+from core.pipeline.factory import PipelineFactory
+from core.utils.file_io import FilePromptLoader, FileOutputWriter
+from tests.mocks.browser_mock import MockBrowserDriver
+
+
+def test_successful_code_execution(temp_dir, pipeline_factory, setup_code_test):
+    code_with_backup = """
+import shutil
+import datetime
+import os
+
+def backup_logs():
+    source_dir = "logs"
+    if not os.path.isdir(source_dir):
+        print(f"Папка '{source_dir}' не найдена.")
+        return
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_name = f"logs_backup_{timestamp}"
+    shutil.make_archive(backup_name, 'zip', source_dir)
+    print(f"Резервная копия создана: {backup_name}.zip")
+
+if __name__ == "__main__":
+    backup_logs()
+"""
+    response_map = {
+        "Напиши Python-скрипт, который создаёт резервную копию папки logs": f"```python\\n{code_with_backup}\\n```"
+    }
+    driver = MockBrowserDriver(response_map=response_map, default_response="No response")
+    loader = FilePromptLoader()
+    writer = FileOutputWriter()
+    pipeline = pipeline_factory("code", driver, loader, writer)
+    old_cwd = os.getcwd()
+    os.chdir(str(temp_dir))
+    try:
+        context = pipeline.run()
+    finally:
+        os.chdir(old_cwd)
+    assert "error" not in context or context["error"] is None
+    assert "code" in context
+    assert "execution_stdout" in context
+    zip_files = list(temp_dir.glob("logs_backup_*.zip"))
+    assert len(zip_files) == 1, "Архив не создан"
+    result_file = temp_dir / "result.txt"
+    assert result_file.exists()
+    content = result_file.read_text(encoding='utf-8')
+    assert "## Вопрос" in content
+    assert "## Ответ" in content
+
+
+def test_code_with_syntax_error_and_fix(temp_dir, pipeline_factory, setup_code_test):
+    code_with_error = """
+import shutil
+import datetime
+import os
+
+def backup_logs()
+    source_dir = "logs"
+    if not os.path.isdir(source_dir):
+        print(f"Папка '{source_dir}' не найдена.")
+        return
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_name = f"logs_backup_{timestamp}"
+    shutil.make_archive(backup_name, 'zip', source_dir)
+    print(f"Резервная копия создана: {backup_name}.zip")
+
+if __name__ == "__main__":
+    backup_logs()
+"""
+    fixed_code = """
+import shutil
+import datetime
+import os
+
+def backup_logs():
+    source_dir = "logs"
+    if not os.path.isdir(source_dir):
+        print(f"Папка '{source_dir}' не найдена.")
+        return
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_name = f"logs_backup_{timestamp}"
+    shutil.make_archive(backup_name, 'zip', source_dir)
+    print(f"Резервная копия создана: {backup_name}.zip")
+
+if __name__ == "__main__":
+    backup_logs()
+"""
+    response_map = {
+        "Напиши Python-скрипт": f"```python\\n{code_with_error}\\n```",
+        "Исправь ошибку в коде": f"```python\\n{fixed_code}\\n```"
+    }
+    driver = MockBrowserDriver(response_map=response_map)
+    loader = FilePromptLoader()
+    writer = FileOutputWriter()
+    pipeline = pipeline_factory("code", driver, loader, writer)
+    old_cwd = os.getcwd()
+    os.chdir(str(temp_dir))
+    try:
+        context = pipeline.run()
+    finally:
+        os.chdir(old_cwd)
+    assert "error" not in context or context["error"] is None, f"Ошибка осталась: {context.get('error')}"
+    assert context["execution_returncode"] == 0
+    assert "execution_stdout" in context and "Резервная копия создана:" in context["execution_stdout"]
+    assert len(driver.sent_messages) == 2
+    assert "Напиши Python-скрипт" in driver.sent_messages[0]
+    assert "Исправь ошибку" in driver.sent_messages[1]
+    zip_files = list(temp_dir.glob("logs_backup_*.zip"))
+    assert len(zip_files) == 1
+
+
+def test_code_with_logical_error_not_fixed(temp_dir, pipeline_factory, setup_code_test):
+    code_with_zero_division = """
+def main():
+    x = 1 / 0
+    print(x)
+if __name__ == "__main__":
+    main()
+"""
+    code_still_broken = """
+def main():
+    x = 1 / 0
+    print(x)
+if __name__ == "__main__":
+    main()
+"""
+    response_map = {
+        "Напиши Python-скрипт": f"```python\\n{code_with_zero_division}\\n```",
+        "Исправь ошибку в коде": f"```python\\n{code_still_broken}\\n```"
+    }
+    driver = MockBrowserDriver(response_map=response_map)
+    loader = FilePromptLoader()
+    writer = FileOutputWriter()
+    pipeline = pipeline_factory("code", driver, loader, writer)
+    old_cwd = os.getcwd()
+    os.chdir(str(temp_dir))
+    try:
+        context = pipeline.run()
+    finally:
+        os.chdir(old_cwd)
+    assert "error" in context and context["error"] is not None
+    assert context.get("execution_returncode") != 0
+    assert "ZeroDivisionError" in context["execution_stderr"] or "division by zero" in context["execution_stderr"], \\
+        f"Ожидалась ошибка деления на ноль, но stderr: {context.get('execution_stderr', '')}"
+    assert len(driver.sent_messages) == 2
+    result_file = temp_dir / "result.txt"
+    assert result_file.exists()
+    content = result_file.read_text(encoding='utf-8')
+    assert "ZeroDivisionError" in content or "division by zero" in content
+
+
+def test_text_scenario(temp_dir, pipeline_factory):
+    # Создаём файл с вопросами
+    questions_file = temp_dir / "questions.txt"
+    questions_file.write_text("What is Python?\\nWhat is a decorator?", encoding='utf-8')
+
+    # Мок для браузера
+    driver = MockBrowserDriver(
+        response_map={
+            "What is Python?": "Python is a programming language.",
+            "What is a decorator?": "A decorator is a function that modifies another function."
+        },
+        default_response="I don't know."
+    )
+
+    # Копируем конфиг и модифицируем пути
+    custom_text_pipeline = copy.deepcopy(TEXT_PIPELINE)
+    for step in custom_text_pipeline.steps:
+        if step.name == "LoadPromptsStep":
+            step.input_file = str(questions_file)
+        if step.name == "InitOutputFileStep":
+            step.output_file = str(temp_dir / "answers.md")
+            step.suffix = False  # отключаем добавление timestamp
+        if step.name == "LoopStep":
+            for sub_step in step.steps:
+                if sub_step.name == "SaveOutputStep":
+                    # Убираем явный output_file, чтобы использовался output_file_final из контекста
+                    sub_step.output_file = None
+
+    loader = FilePromptLoader()
+    writer = FileOutputWriter()
+
+    pipeline = PipelineFactory.create_from_config(
+        custom_text_pipeline,
+        driver=driver,
+        loader=loader,
+        writer=writer
+    )
+
+    context = pipeline.run()
+
+    # Проверяем, что ошибок нет
+    assert "error" not in context or context["error"] is None
+
+    # Проверяем, что были отправлены два сообщения
+    assert len(driver.sent_messages) == 2, f"Было отправлено {len(driver.sent_messages)} сообщений, ожидалось 2"
+
+    # Проверяем, что в контексте есть ответ (последний)
+    assert "response" in context, "В контексте нет response"
+    assert context["response"] is not None and len(context["response"]) > 0, "Ответ пустой"
+
+    # Проверяем, что создан файл
+    answer_file = temp_dir / "answers.md"
+    assert answer_file.exists(), f"Файл {answer_file} не создан."
+
+    # Проверяем содержимое файла
+    content = answer_file.read_text(encoding='utf-8')
+    assert "## Вопрос" in content
+    assert "What is Python?" in content
+    assert "Python is a programming language." in content
+    assert "What is a decorator?" in content
+    assert "A decorator is a function" in content
+'''
+
+def main():
+    root = Path.cwd()
+    test_file = root / "tests" / "test_pipeline.py"
+    if not test_file.exists():
+        print(f"❌ Файл {test_file} не найден.")
+        return
+
+    backup = test_file.with_suffix(test_file.suffix + ".bak3")
+    shutil.copy2(test_file, backup)
+    print(f"✅ Создан бэкап: {backup}")
+
+    test_file.write_text(FIXED_TEST_CONTENT, encoding='utf-8')
+    print(f"✅ Обновлён {test_file}")
+
+    print("\nТеперь запустите pytest tests/ -v. Все 4 теста должны пройти.")
+
+if __name__ == "__main__":
+    main()
