@@ -6,7 +6,8 @@ class RuleProcessor:
     def __init__(self, timeout=60):
         self.timeout = timeout
 
-    def check_syntax(self, code: str) -> tuple[bool, str]:
+    @staticmethod
+    def check_syntax(code: str) -> tuple[bool, str]:
         try:
             compile(code, '<string>', 'exec')
             return True, ""
@@ -33,7 +34,8 @@ class RuleProcessor:
             os.unlink(script_path)
         return stdout, stderr, returncode
 
-    def analyze_errors(self, stderr: str) -> str:
+    @staticmethod
+    def analyze_errors(stderr: str) -> str:
         lines = stderr.splitlines()
         error_lines = [line for line in lines if "Error" in line or "Traceback" in line]
         if error_lines:

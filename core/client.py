@@ -1,3 +1,4 @@
+# core/client.py
 import time
 from typing import Optional
 from selenium import webdriver

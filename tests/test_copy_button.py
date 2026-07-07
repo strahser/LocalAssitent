@@ -7,8 +7,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 
+from config.config import DEBUG_PORT, SELENIUM_CONFIG
 from logger.Logger import Logger
-from config import SELENIUM_CONFIG, DEBUG_PORT
 from core.message_finder import MessageFinder
 from core.response_copier import ResponseCopier
 

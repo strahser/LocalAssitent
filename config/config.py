@@ -9,7 +9,7 @@ DEBUG_PORT = 9222
 EDGE_USER_DATA_DIR = f"C:\\Users\\{USER_NAME}\\AppData\\Local\\Temp\\EdgeDebugProfile"
 
 # Настройки логирования (оставлены как глобальные для обратной совместимости)
-LOG_TO_HTML = True
+LOG_TO_HTML = False
 LOG_TO_FILE = False
 SAVE_RESPONSES = True
 LOG_FILE = "assistant.log"
@@ -67,7 +67,7 @@ TEXT_SCENARIO = ScenarioConfig(
     create_new_chat=False,
     delay_between_questions=5,
     input_file="tests/questions.txt",
-    output_file="answersLlmBase.md",
+    output_file="answers.md",
     description="Обработка вопросов из текстового файла"
 )
 
