@@ -1,13 +1,13 @@
 from dataclasses import dataclass, field
-from typing import List, Optional, Any, Dict, Union
+from typing import List, Optional
+from config.constants import ScenarioType, ExtractorType
 
-# Базовый класс для конфигурации шага
+# === Базовый и конкретные конфигурации шагов ===
 @dataclass
 class StepConfig:
     name: str
     enabled: bool = True
 
-# Конкретные шаги
 @dataclass
 class NewChatStepConfig(StepConfig):
     name: str = "NewChatStep"
@@ -20,10 +20,12 @@ class SendPromptStepConfig(StepConfig):
 @dataclass
 class ExtractCodeStepConfig(StepConfig):
     name: str = "ExtractCodeStep"
+    extractor_type: str = ExtractorType.SIMPLE.value   # "regex" или "simple"
 
 @dataclass
 class ExecuteCodeStepConfig(StepConfig):
     name: str = "ExecuteCodeStep"
+    timeout: int = 60
 
 @dataclass
 class SaveOutputStepConfig(StepConfig):
@@ -58,7 +60,7 @@ class PipelineConfig:
     description: str = ""
     steps: List[StepConfig] = field(default_factory=list)
 
-# Предопределённые сценарии
+# === Предопределённые пайплайны ===
 CODE_PIPELINE = PipelineConfig(
     description="Генерация и выполнение Python кода",
     steps=[
@@ -66,15 +68,15 @@ CODE_PIPELINE = PipelineConfig(
         SendPromptStepConfig(
             prompt_template="Напиши Python-скрипт, который создаёт резервную копию папки logs. ОТВЕТЬ ТОЛЬКО КОДОМ В БЛОКЕ ```python ... ```, БЕЗ ПОЯСНЕНИЙ."
         ),
-        ExtractCodeStepConfig(),
-        ExecuteCodeStepConfig(),
+        ExtractCodeStepConfig(extractor_type=ExtractorType.REGEX.value),
+        ExecuteCodeStepConfig(timeout=60),
         IfErrorStepConfig(
             sub_steps=[
                 SendPromptStepConfig(
                     prompt_template="Исправь ошибку в коде:\n```\n{error}\n```\nВерни только исправленный код."
                 ),
-                ExtractCodeStepConfig(),
-                ExecuteCodeStepConfig()
+                ExtractCodeStepConfig(extractor_type=ExtractorType.REGEX.value),
+                ExecuteCodeStepConfig(timeout=60)
             ]
         ),
         SaveOutputStepConfig(output_file="result.txt")
@@ -84,8 +86,8 @@ CODE_PIPELINE = PipelineConfig(
 TEXT_PIPELINE = PipelineConfig(
     description="Обработка вопросов из файла",
     steps=[
-        LoadPromptsStepConfig(input_file="tests/questions.txt"),
-        InitOutputFileStepConfig(output_file="answers.md"),
+        LoadPromptsStepConfig(input_file="tests/data/questions.txt"),
+        InitOutputFileStepConfig(output_file="tests/data/answers.md"),
         LoopStepConfig(
             for_each="prompts",
             steps=[
@@ -98,8 +100,8 @@ TEXT_PIPELINE = PipelineConfig(
     ]
 )
 
-# Словарь сценариев
+# Словарь сценариев, ключи - значения перечисления ScenarioType
 PIPELINE_DEFINITIONS = {
-    "code": CODE_PIPELINE,
-    "text": TEXT_PIPELINE
+    ScenarioType.CODE.value: CODE_PIPELINE,
+    ScenarioType.TEXT.value: TEXT_PIPELINE
 }

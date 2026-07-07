@@ -8,9 +8,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 
 from config.config import DEBUG_PORT, SELENIUM_CONFIG
+from core.browser.message_finder import MessageFinder
+from core.browser.response_copier import ResponseCopier
 from logger.Logger import Logger
-from core.message_finder import MessageFinder
-from core.response_copier import ResponseCopier
+
 
 def main():
     logger = Logger(log_to_file=True, log_to_html=False, save_responses=False,

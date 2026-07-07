@@ -2,3 +2,4 @@ selenium>=4.15.0
 pywin32>=306
 tqdm
 loguru
+pytest

@@ -9,9 +9,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 
 from config.config import DEBUG_PORT, SELENIUM_CONFIG
+from core.browser.deepseek_driver import DeepSeekBrowserDriver
+from core.browser.message_finder import MessageFinder
 from logger.Logger import Logger
-from core.client import DeepSeekClient
-from core.message_finder import MessageFinder
+
 from utils.clipboard_manager import ClipboardManager
 
 
@@ -97,7 +98,7 @@ def main():
         sys.exit(1)
 
     # Создаём клиент для отправки сообщений
-    client = DeepSeekClient(logger, SELENIUM_CONFIG)
+    client = DeepSeekBrowserDriver(logger, SELENIUM_CONFIG)
     driver = client.driver
     message_finder = MessageFinder(driver, SELENIUM_CONFIG, logger=logger)
 

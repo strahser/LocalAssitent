@@ -1,18 +1,18 @@
 # test_chat_ui.py
 import sys
-import time
+
 from selenium import webdriver
-from selenium.webdriver.edge.options import Options
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.edge.options import Options
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.webdriver.support.ui import WebDriverWait
 
 from config.config import DEBUG_PORT, SELENIUM_CONFIG
+from core.browser.message_finder import MessageFinder
+from core.browser.response_copier import ResponseCopier
 from logger.Logger import Logger
-from core.client import DeepSeekClient
-from core.message_finder import MessageFinder
-from core.response_copier import ResponseCopier
+
 
 class ChatUITester:
     def __init__(self):
@@ -55,7 +55,7 @@ class ChatUITester:
             return False
 
         # Используем существующий DeepSeekClient для отправки сообщений
-        self.client = DeepSeekClient(self.logger, SELENIUM_CONFIG)
+        self.client = (self.logger, SELENIUM_CONFIG)
         # Используем driver из клиента, чтобы избежать дублирования
         self.driver = self.client.driver
         self.message_finder = MessageFinder(self.driver, SELENIUM_CONFIG, logger=self.logger)

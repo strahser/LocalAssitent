@@ -1,9 +1,8 @@
-# assistant.py
 import sys
 from config import config
+from config.constants import ScenarioType
 from config.pipeline_configs import PIPELINE_DEFINITIONS
 from core.browser.deepseek_driver import DeepSeekBrowserDriver
-from core.processing.response_processor import ResponseProcessor
 from core.pipeline.factory import PipelineFactory
 from core.utils.file_io import FilePromptLoader, FileOutputWriter
 from logger.Logger import Logger
@@ -23,15 +22,18 @@ def main():
     selenium_config = config.SELENIUM_CONFIG
     driver = DeepSeekBrowserDriver(logger, selenium_config)
 
-    scenario_config = config.SCENARIO_CONFIGS.get(config.SCENARIO)
-    extractor_type = getattr(scenario_config, "extractor_type", "simple") if scenario_config else "simple"
-    timeout_script = getattr(scenario_config, "timeout_script", 60) if scenario_config else 60
-    processor = ResponseProcessor(extractor_type=extractor_type, script_timeout=timeout_script)
+    # Определяем сценарий: аргумент командной строки или значение из config
+    scenario_name = sys.argv[1] if len(sys.argv) > 1 else config.SCENARIO
+    # Проверяем, что сценарий допустим
+    if scenario_name not in [item.value for item in ScenarioType]:
+        logger.error(f"Неизвестный сценарий: {scenario_name}. Допустимые: {[item.value for item in ScenarioType]}")
+        sys.exit(1)
 
-    scenario_name = config.SCENARIO
+    logger.info(f"Запуск сценария: {scenario_name}")
+
     pipeline_config = PIPELINE_DEFINITIONS.get(scenario_name)
     if not pipeline_config:
-        logger.error(f"Неизвестный сценарий: {scenario_name}")
+        logger.error(f"Конфигурация для сценария '{scenario_name}' не найдена.")
         sys.exit(1)
 
     loader = FilePromptLoader()
@@ -40,8 +42,6 @@ def main():
     pipeline = PipelineFactory.create_from_config(
         pipeline_config,
         driver=driver,
-        parser=processor,
-        executor=processor,
         loader=loader,
         writer=writer
     )
