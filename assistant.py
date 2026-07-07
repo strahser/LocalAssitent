@@ -1,9 +1,12 @@
 # assistant.py
 import sys
 from config import config
-from core.client import DeepSeekClient
+from config.pipeline_configs import PIPELINE_DEFINITIONS
+from core.browser.deepseek_driver import DeepSeekBrowserDriver
+from core.processing.response_processor import ResponseProcessor
+from core.pipeline.factory import PipelineFactory
+from core.utils.file_io import FilePromptLoader, FileOutputWriter
 from logger.Logger import Logger
-from scenarios.ScenarioFactory import ScenarioFactory
 
 def main():
     logger = Logger(
@@ -18,34 +21,35 @@ def main():
     )
 
     selenium_config = config.SELENIUM_CONFIG
-    client = DeepSeekClient(logger, selenium_config)
+    driver = DeepSeekBrowserDriver(logger, selenium_config)
+
+    scenario_config = config.SCENARIO_CONFIGS.get(config.SCENARIO)
+    extractor_type = getattr(scenario_config, "extractor_type", "simple") if scenario_config else "regex"
+    timeout_script = getattr(scenario_config, "timeout_script", 60) if scenario_config else 60
+    processor = ResponseProcessor(extractor_type=extractor_type, script_timeout=timeout_script)
 
     scenario_name = config.SCENARIO
-    scenario_config = config.SCENARIO_CONFIGS[scenario_name]
-    scenario = ScenarioFactory.get_scenario(scenario_name, client, logger, scenario_config)
+    pipeline_config = PIPELINE_DEFINITIONS.get(scenario_name)
+    if not pipeline_config:
+        logger.error(f"Неизвестный сценарий: {scenario_name}")
+        sys.exit(1)
 
-    # UI – прогресс‑бар для текстового сценария
-    if scenario_name == "text":
-        try:
-            with open(scenario_config.input_file, 'r', encoding='utf-8') as f:
-                questions = [line.strip() for line in f if line.strip()]
-            total = len(questions)
-        except (FileNotFoundError, TypeError):
-            total = 0
+    loader = FilePromptLoader()
+    writer = FileOutputWriter()
 
-        if total > 0:
-            from tqdm import tqdm
-            with tqdm(total=total, desc="📊 Общий прогресс", unit="вопрос",
-                      position=0, leave=True, colour='green') as pbar:
-                def progress_callback(current, total):
-                    pbar.update(1)
-                success = scenario.run(progress_callback=progress_callback)
-        else:
-            success = scenario.run()
-    else:
-        success = scenario.run()
+    pipeline = PipelineFactory.create_from_config(
+        pipeline_config,
+        driver=driver,
+        parser=processor,
+        executor=processor,
+        loader=loader,
+        writer=writer
+    )
 
-    client.close()
+    context = pipeline.run()
+    success = not context.get("error")
+
+    driver.close()
     logger.close()
     sys.exit(0 if success else 1)
 

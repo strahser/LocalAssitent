@@ -2,6 +2,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Optional
 from config.custom_selectors_config import SELECTORS
+from config.pipeline_configs import PIPELINE_DEFINITIONS
 
 USER_NAME = os.getlogin()
 DEEPSEEK_URL = "https://chat.deepseek.com/a/chat/s/df0a17e8-235b-47e2-aeca-6a16d65734f0"
@@ -59,7 +60,7 @@ TEXT_SCENARIO = ScenarioConfig(
         "Ответь на вопрос подробно и структурировано в формате markdown "
     ),
     response_mode="full",
-    extractor_type=None,
+    extractor_type="simple",
     max_retries=1,
     auto_send_results=False,
     timeout_script=30,
