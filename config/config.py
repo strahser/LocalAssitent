@@ -2,7 +2,6 @@ import os
 from dataclasses import dataclass, field
 from typing import Optional
 from config.custom_selectors_config import SELECTORS
-from config.pipeline_configs import PIPELINE_DEFINITIONS
 
 USER_NAME = os.getlogin()
 DEEPSEEK_URL = "https://chat.deepseek.com/a/chat/s/df0a17e8-235b-47e2-aeca-6a16d65734f0"
@@ -22,27 +21,22 @@ LOG_AUTO_CLEAR = True
 @dataclass
 class ScenarioConfig:
     """Конфигурация сценария (code или text)."""
-    prompt_template: str
-    response_mode: str
-    extractor_type: Optional[str] = None
-    max_retries: int = 2
-    auto_send_results: bool = True
-    timeout_script: int = 60
-    timeout_deepseek: int = 300
-    create_new_chat: bool = False
-    delay_between_questions: int = 0
-    input_file: Optional[str] = None
-    output_file: Optional[str] = None
-    description: Optional[str] = None
+    prompt_template: str         # Шаблон промпта, может содержать {question} или {error} для подстановки
+    response_mode: str           # "code" для извлечения кода, "full" для полного ответа
+    extractor_type: Optional[str] = None  # "regex" или "simple" (для извлечения кода)
+    max_retries: int = 2         # Максимальное число попыток при ошибках
+    auto_send_results: bool = True  # Отправлять ли результат выполнения обратно в чат
+    timeout_script: int = 60     # Таймаут выполнения скрипта (сек)
+    timeout_deepseek: int = 300  # Таймаут ожидания ответа от DeepSeek (сек)
+    create_new_chat: bool = False  # Создавать ли новый чат перед каждым вопросом
+    delay_between_questions: int = 0  # Пауза между вопросами (сек)
+    input_file: Optional[str] = None  # Файл с вопросами (для текстового сценария)
+    output_file: Optional[str] = None # Файл для сохранения ответов
+    description: Optional[str] = None # Описание сценария
 
 # Конфигурация для сценария "code"
 CODE_SCENARIO = ScenarioConfig(
-    prompt_template=(
-        "Напиши Python-скрипт, который создаёт резервную копию папки logs. "
-        "ОТВЕТЬ ТОЛЬКО КОДОМ В БЛОКЕ ```python ... ```, БЕЗ ПОЯСНЕНИЙ И ЛИШНЕГО ТЕКСТА. "
-        "Начинай ответ сразу с ```python. "
-        "Если добавляешь пояснения – помещай их в комментарии внутри кода."
-    ),
+    prompt_template=("Напиши Python-скрипт, который создаёт резервную копию папки logs. ОТВЕТЬ ТОЛЬКО КОДОМ В БЛОКЕ ```python ... ```, БЕЗ ПОЯСНЕНИЙ И ЛИШНЕГО ТЕКСТА. Начинай ответ сразу с ```python. Если добавляешь пояснения – помещай их в комментарии внутри кода."),
     response_mode="code",
     extractor_type="regex",
     max_retries=2,
@@ -56,9 +50,7 @@ CODE_SCENARIO = ScenarioConfig(
 
 # Конфигурация для сценария "text"
 TEXT_SCENARIO = ScenarioConfig(
-    prompt_template=(
-        "Ответь на вопрос подробно и структурировано в формате markdown "
-    ),
+    prompt_template=("Ответь на вопрос подробно и структурировано в формате markdown"),
     response_mode="full",
     extractor_type="simple",
     max_retries=1,
@@ -80,7 +72,6 @@ SCENARIO_CONFIGS = {
 
 # Активный сценарий (по умолчанию "text")
 SCENARIO = "text"
-
 @dataclass
 class SeleniumConfig:
     """Конфигурация для подключения к браузеру и работы с Selenium."""

@@ -24,7 +24,7 @@ def main():
     driver = DeepSeekBrowserDriver(logger, selenium_config)
 
     scenario_config = config.SCENARIO_CONFIGS.get(config.SCENARIO)
-    extractor_type = getattr(scenario_config, "extractor_type", "simple") if scenario_config else "regex"
+    extractor_type = getattr(scenario_config, "extractor_type", "simple") if scenario_config else "simple"
     timeout_script = getattr(scenario_config, "timeout_script", 60) if scenario_config else 60
     processor = ResponseProcessor(extractor_type=extractor_type, script_timeout=timeout_script)
 
