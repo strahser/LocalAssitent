@@ -1,0 +1,40 @@
+"""
+Константы проекта.
+Все магические числа и строки вынесены сюда.
+"""
+
+from typing import Final
+
+# Временные константы
+DEFAULT_TIMEOUT: Final[int] = 30
+RETRY_ATTEMPTS: Final[int] = 3
+RETRY_DELAY: Final[float] = 1.0
+MAX_RETRY_DELAY: Final[float] = 10.0
+
+# Selenium константы
+PAGE_LOAD_TIMEOUT: Final[int] = 10
+SCRIPT_TIMEOUT: Final[int] = 5
+
+# API константы
+API_REQUEST_TIMEOUT: Final[int] = 60
+API_MAX_RETRIES: Final[int] = 5
+
+# Логирование
+LOG_FORMAT: Final[str] = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+LOG_DATE_FORMAT: Final[str] = "%Y-%m-%d %H:%M:%S"
+
+# HTTP статусы
+HTTP_OK: Final[int] = 200
+HTTP_CREATED: Final[int] = 201
+HTTP_BAD_REQUEST: Final[int] = 400
+HTTP_UNAUTHORIZED: Final[int] = 401
+HTTP_FORBIDDEN: Final[int] = 403
+HTTP_NOT_FOUND: Final[int] = 404
+HTTP_SERVER_ERROR: Final[int] = 500
+
+# Селекторы (примеры)
+DEFAULT_SELECTORS = {
+    "search_input": "input[type='text']",
+    "search_button": "button[type='submit']",
+    "result_container": ".results",
+}
