@@ -413,38 +413,64 @@ class SeleniumDeepSeekClient:
     #  Прикрепление файлов
     # ──────────────────────────────
 
+    def _resolve_file_paths(self, file_paths: List[str]) -> List[str]:
+        base = os.path.dirname(os.path.abspath(__file__))
+        resolved = []
+        for f in file_paths:
+            abs_cwd = os.path.abspath(f)
+            if os.path.exists(abs_cwd):
+                resolved.append(abs_cwd)
+                continue
+            abs_base = os.path.join(base, f)
+            if os.path.exists(abs_base):
+                resolved.append(abs_base)
+                continue
+            self.logger.log(f"⚠️ Файл не найден: {f}", "WARNING")
+        return resolved
+
     def attach_files(self, file_paths: List[str]) -> bool:
-        """
-        Прикрепляет файлы к сообщению.
-        file_paths — список абсолютных путей к файлам.
-        """
         if not file_paths:
             self.logger.log("⚠️ Список файлов пуст.")
             return True
 
-        self.logger.log(f"📎 Прикрепление {len(file_paths)} файлов...")
+        abs_paths = self._resolve_file_paths(file_paths)
+        if not abs_paths:
+            self.logger.log("❌ Ни один из указанных файлов не найден.", "ERROR")
+            return False
+        if len(abs_paths) < len(file_paths):
+            self.logger.log(f"⚠️ {len(file_paths) - len(abs_paths)} файлов не найдено, пропущены.", "WARNING")
+
+        self.logger.log(f"📎 Прикрепление {len(abs_paths)} файлов...")
 
         file_input = self.finder.find_file_input()
         if file_input:
-            self.logger.log("✅ Найден input[type='file'], отправляем пути...")
+            self.logger.log(f"✅ Найден input[type='file'], отправляем пути...")
             try:
-                file_input.send_keys("\n".join(file_paths))
+                self.driver.execute_script(
+                    "arguments[0].style.display = 'block'; arguments[0].style.visibility = 'visible';",
+                    file_input
+                )
+                time.sleep(0.2)
+                file_input.send_keys("\n".join(abs_paths))
                 time.sleep(2)
                 self.logger.log("✅ Файлы отправлены через input[type='file'].")
                 return True
             except Exception as e:
                 self.logger.log(f"⚠️ Ошибка отправки через input[type='file']: {e}", "WARNING")
 
+        self.logger.log("🔄 Пробуем через клик по кнопке аттача...")
         attach_btn = self.finder.find_attach_button()
         if attach_btn:
-            self.logger.log("✅ Найдена кнопка аттача, нажимаем...")
             try:
                 attach_btn.click()
                 time.sleep(1)
-
                 file_input = self.finder.find_file_input()
                 if file_input:
-                    file_input.send_keys("\n".join(file_paths))
+                    self.driver.execute_script(
+                        "arguments[0].style.display = 'block'; arguments[0].style.visibility = 'visible';",
+                        file_input
+                    )
+                    file_input.send_keys("\n".join(abs_paths))
                     time.sleep(2)
                     self.logger.log("✅ Файлы прикреплены после клика по кнопке.")
                     return True

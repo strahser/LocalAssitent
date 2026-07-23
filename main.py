@@ -1,6 +1,12 @@
 import sys
 import os
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except:
+    pass
 
 import config
 from agent.DeepSeekClient import DeepSeekClient
@@ -19,9 +25,9 @@ def main():
         html_file=config.HTML_LOG_FILE
     )
 
-    logger.log(f"🚀 Сценарий: {scenario_name}")
-    logger.log(f"📝 Описание: {scenario_cfg.get('description', '')}")
-    logger.log(f"🔁 Макс. итераций: {scenario_cfg.get('max_iterations', 1)}")
+    logger.log(f"Сценарий: {scenario_name}")
+    logger.log(f"Описание: {scenario_cfg.get('description', '')}")
+    logger.log(f"Макс. итераций: {scenario_cfg.get('max_iterations', 1)}")
 
     timeout = scenario_cfg.get("timeout_deepseek", 180)
     client = DeepSeekClient(

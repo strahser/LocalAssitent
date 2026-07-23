@@ -194,20 +194,41 @@ class CombinedStrategy(ResponseReadyStrategy):
         except Exception as e:
             self.logger.log(f"🔍 send_button: ошибка ({e})")
 
+    def _get_content_len(self, driver, last_message_element) -> int:
+        try:
+            return len((last_message_element.text or "").strip())
+        except:
+            return 0
+
+    def _check_content_ok(self, driver, last_message_element) -> bool:
+        try:
+            text = (last_message_element.text or "").strip()
+            if len(text) >= self.MIN_CONTENT_LENGTH:
+                return True
+            # also check for code blocks even if short
+            code_blocks = last_message_element.find_elements(By.CSS_SELECTOR, SELECTORS["copy_button"])
+            if code_blocks:
+                return True
+            return False
+        except:
+            return False
+
     def wait(self, driver, last_message_element: WebElement, timeout: float) -> tuple[bool, str]:
         start_time = time.time()
         last_debug_time = start_time
 
         # 1. Пробуем стратегию по кнопке отправки (самая надёжная)
         ok, reason = self.send_button_strategy.wait(driver, last_message_element, timeout)
-        if ok:
+        if ok and self._check_content_ok(driver, last_message_element):
             return True, reason
+        if ok:
+            self.logger.log(f"send_button готов, но контент короткий ({self._get_content_len(driver, last_message_element)}). Ждём дальше.")
 
         # 2. Пробуем стратегию появления кнопки копирования сообщения
         remaining = timeout - (time.time() - start_time)
         if remaining > 0:
             ok, reason = self.copy_message_strategy.wait(driver, last_message_element, remaining)
-            if ok:
+            if ok and self._check_content_ok(driver, last_message_element):
                 return True, reason
 
         # 3. Пробуем стабилизацию текста + появление кнопки копирования блоков кода
