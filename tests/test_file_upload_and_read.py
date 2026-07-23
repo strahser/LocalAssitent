@@ -1,7 +1,12 @@
 """
-End-to-end test: upload files → send prompt → verify AI reads and responds.
+End-to-end test: attach files → send prompt → verify AI reads and responds.
+
+Tests the full file-attachment pipeline:
+  1. Attach files via attach_files() with relative paths
+  2. Send a prompt referencing the attached files
+  3. Verify the AI response mentions both files
 """
-import sys, os, time
+import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent.DeepSeekClient import DeepSeekClient
@@ -17,12 +22,8 @@ def main():
 
     client = DeepSeekClient(logger, timeout=180)
 
-    # ── 1. Attach files ──────────────────────────────────
-    test_files = [
-        "config.py",
-        "main.py",
-    ]
-    logger.log(f"📎 Тест: прикрепление файлов: {test_files}")
+    test_files = ["config.py", "main.py"]
+    logger.log(f"📎 Прикрепление файлов: {test_files}")
 
     ok = client.attach_files(test_files)
     if not ok:
@@ -30,28 +31,27 @@ def main():
         return False
     logger.log("✅ attach_files OK")
 
-    # ── 2. Send prompt ───────────────────────────────────
     prompt = (
         "Прочитай прикрепленные файлы config.py и main.py. "
         "Кратко опиши, что делает каждый файл (1-2 предложения на файл)."
     )
-    logger.log(f"📤 Отправка запроса: {prompt}")
+    logger.log(f"📤 Отправка запроса с упоминанием файлов...")
 
     result = client.send_prompt_with_code(prompt)
     if result is None:
-        logger.log("❌ Не удалось получить ответ", "ERROR")
+        logger.log("❌ Не удалось получить ответ от DeepSeek", "ERROR")
         return False
 
     full_text, code_text = result
     logger.log(f"✅ Ответ получен ({len(full_text)} символов)")
     logger.log(f"--- НАЧАЛО ОТВЕТА ---\n{full_text}\n--- КОНЕЦ ОТВЕТА ---")
 
-    # ── 3. Verify files were referenced ──────────────────
-    if ("config.py" in full_text or "config" in full_text.lower()) and \
-       ("main.py" in full_text or "main" in full_text.lower()):
-        logger.log("✅ AI упомянул оба файла")
+    mentions_config = "config.py" in full_text or "config" in full_text.lower()
+    mentions_main = "main.py" in full_text or "main" in full_text.lower()
+    if mentions_config and mentions_main:
+        logger.log("✅ AI прочитал оба файла (имена упомянуты в ответе)")
     else:
-        logger.log("⚠️ AI мог не прочитать файлы (не найдены имена в ответе)", "WARNING")
+        logger.log("⚠️ AI мог не прочитать файлы (имена не найдены в ответе)", "WARNING")
 
     client.close()
     return True
