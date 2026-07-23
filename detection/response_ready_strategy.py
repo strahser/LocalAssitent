@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import StaleElementReferenceException
-from selectors import SELECTORS
+from detection.selectors import SELECTORS
 
 
 class ResponseReadyStrategy(ABC):
@@ -152,6 +152,8 @@ class CombinedStrategy(ResponseReadyStrategy):
     2. Появление кнопки копирования сообщения.
     3. Стабилизация текста.
     """
+    MIN_CONTENT_LENGTH = 80
+
     def __init__(self,
                  text_strategy: TextStabilizationStrategy,
                  button_strategy: CopyButtonAppearanceStrategy,
@@ -214,6 +216,13 @@ class CombinedStrategy(ResponseReadyStrategy):
                 self._log_element_state(driver)
                 last_debug_time = time.time()
 
+            # Получаем текущий текст сообщения
+            msg_text = ""
+            try:
+                msg_text = (last_message_element.text or "").strip()
+            except:
+                pass
+
             # Проверяем кнопку копирования блоков кода
             try:
                 copy_buttons = last_message_element.find_elements(By.CSS_SELECTOR, SELECTORS["copy_button"])
@@ -225,19 +234,17 @@ class CombinedStrategy(ResponseReadyStrategy):
                         ok_stab, reason_stab = self.text_strategy.wait(driver, last_message_element, check_timeout)
                         if ok_stab:
                             return True, f"кнопка 'Копировать' (блок кода) + стабилизация ({reason_stab})"
-                        else:
-                            # если стабилизация не подтвердилась, продолжаем ждать
-                            pass
             except:
                 pass
 
-            # Проверяем стабилизацию текста
-            remaining2 = timeout - (time.time() - start_time)
-            if remaining2 > 0:
-                check_timeout = min(remaining2, 0.5)
-                ok, reason = self.text_strategy.wait(driver, last_message_element, check_timeout)
-                if ok:
-                    return True, reason
+            # Проверяем стабилизацию текста (только если длина > MIN_CONTENT_LENGTH)
+            if len(msg_text) >= self.MIN_CONTENT_LENGTH:
+                remaining2 = timeout - (time.time() - start_time)
+                if remaining2 > 0:
+                    check_timeout = min(remaining2, 0.5)
+                    ok, reason = self.text_strategy.wait(driver, last_message_element, check_timeout)
+                    if ok:
+                        return True, reason
 
             time.sleep(0.2)
 
