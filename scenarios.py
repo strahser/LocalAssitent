@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from extractors import ExtractorFactory
 from rules import RuleProcessor
 from tools import read_file, grep_search, glob_search, list_dir, execute_code, write_file
+from tools.merge_docs import merge_documents
 
 
 class Scenario(ABC):
@@ -138,6 +139,12 @@ class CodeScenario(Scenario):
         if files:
             self.logger.log(f"📎 Прикрепление файлов: {files}")
             self.client.attach_files(files)
+            time.sleep(1)
+
+        paste_clipboard = self.config.get("paste_clipboard", False)
+        if paste_clipboard:
+            self.logger.log("📋 Вставка файлов из буфера обмена (Ctrl+V)...")
+            self.client.paste_files_from_clipboard()
             time.sleep(1)
 
         current_prompt = prompt_template
@@ -283,6 +290,12 @@ class TextScenario(Scenario):
                 self.client.new_chat()
                 time.sleep(1)
 
+            paste_clipboard = self.config.get("paste_clipboard", False)
+            if paste_clipboard:
+                self.logger.log("📋 Вставка файлов из буфера обмена (Ctrl+V)...")
+                self.client.paste_files_from_clipboard()
+                time.sleep(1)
+
             prompt = f"{prompt_template}\n\nВопрос: {q}"
             response = self.client.send_prompt(prompt)
 
@@ -304,12 +317,44 @@ class TextScenario(Scenario):
         return True
 
 
+class MergeScenario(Scenario):
+    def __init__(self, logger):
+        super().__init__(logger)
+
+    def run(self):
+        self.logger.log("🚀 Запуск сценария: Merge (сведение документов)")
+
+        merge_dir = self.config.get("merge_dir", ".")
+        extensions = self.config.get("extensions", None)
+        output_file = self.config.get("output_file", "merged_context.txt")
+        max_file_size = self.config.get("max_file_size", 100_000)
+        exclude_dirs = self.config.get("exclude_dirs", None)
+
+        self.logger.log(f"📂 Директория: {merge_dir}")
+        self.logger.log(f"📄 Выходной файл: {output_file}")
+        if extensions:
+            self.logger.log(f"🔍 Расширения: {extensions}")
+
+        result = merge_documents(
+            root_dir=merge_dir,
+            output_file=output_file,
+            extensions=extensions,
+            exclude_dirs=set(exclude_dirs) if exclude_dirs else None,
+            max_file_size=max_file_size,
+        )
+        self.logger.log(f"✅ {result}", "SUCCESS")
+        return True
+
+
 class ScenarioFactory:
     @staticmethod
     def get_scenario(name, logger):
-        if name == "code":
-            return CodeScenario(logger)
-        elif name == "text":
-            return TextScenario(logger)
-        else:
+        scenarios = {
+            "code": CodeScenario,
+            "text": TextScenario,
+            "merge": MergeScenario,
+        }
+        cls = scenarios.get(name)
+        if cls is None:
             raise ValueError(f"Неизвестный сценарий: {name}")
+        return cls(logger)

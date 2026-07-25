@@ -5,12 +5,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
-except:
+except Exception:
     pass
 
 import config
 from agent.DeepSeekClient import DeepSeekClient
-from Logger import Logger
+from logger import Logger
 from scenarios import ScenarioFactory
 
 
@@ -27,19 +27,20 @@ def main():
 
     logger.log(f"Сценарий: {scenario_name}")
     logger.log(f"Описание: {scenario_cfg.get('description', '')}")
-    logger.log(f"Макс. итераций: {scenario_cfg.get('max_iterations', 1)}")
-
-    timeout = scenario_cfg.get("timeout_deepseek", 180)
-    client = DeepSeekClient(
-        logger,
-        timeout=timeout,
-        email=scenario_cfg.get("email", ""),
-        password=scenario_cfg.get("password", "")
-    )
 
     scenario = ScenarioFactory.get_scenario(scenario_name, logger)
-    scenario.set_client(client)
     scenario.set_config(scenario_cfg)
+
+    if scenario_name != "merge":
+        logger.log(f"Макс. итераций: {scenario_cfg.get('max_iterations', 1)}")
+        timeout = scenario_cfg.get("timeout_deepseek", 180)
+        client = DeepSeekClient(
+            logger,
+            timeout=timeout,
+            email=scenario_cfg.get("email", ""),
+            password=scenario_cfg.get("password", "")
+        )
+        scenario.set_client(client)
 
     success = scenario.run()
     logger.close()

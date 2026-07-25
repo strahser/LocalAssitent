@@ -13,6 +13,29 @@ SAVE_RESPONSES = True
 LOG_FILE = "assistant.log"
 HTML_LOG_FILE = "log.html"
 
+PIPELINE_FILES = [
+    "main.py",
+    "config.py",
+    "scenarios.py",
+    "extractors.py",
+    "rules.py",
+    "Logger.py",
+    "agent/DeepSeekClient.py",
+    "agent/selenium_client.py",
+    "agent/auth.py",
+    "agent/clipboard_manager.py",
+    "detection/element_finder.py",
+    "detection/selectors.py",
+    "detection/response_ready_strategy.py",
+    "detection/action_panel_finder.py",
+    "tools/read_file.py",
+    "tools/search.py",
+    "tools/execute.py",
+    "tools/write_file.py",
+    "tools/list_dir.py",
+    "tools/__init__.py",
+]
+
 SCENARIO_CONFIGS = {
     "code": {
         "prompt_template": (
@@ -77,7 +100,17 @@ SCENARIO_CONFIGS = {
         "create_new_chat": False,
         "delay_between_questions": 5,
         "description": "Ответы на вопросы (Q&A формат)"
-    }
+    },
+    "merge": {
+        "extensions": [".cs", ".py", ".xaml", ".csproj", ".sln", ".json", ".xml", ".config"],
+        "exclude_dirs": [
+            "__pycache__", ".git", ".venv", "venv", "node_modules",
+            "build", "dist", ".idea", ".vs", "bin", "obj", "packages",
+        ],
+        "max_file_size": 100_000,
+        "output_file": "merged_context.txt",
+        "description": "Сведение файлов проекта в один TXT для внешнего ИИ"
+    },
 }
 
 
@@ -87,10 +120,12 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Примеры:
-  python assistant.py --scenario code --prompt "Напиши скрипт для бэкапа"
-  python assistant.py --scenario text --input questions.txt --output answers.md
-  python assistant.py --scenario code --max-iterations 5
-        """
+  python main.py --scenario code --prompt "Напиши скрипт для бэкапа"
+  python main.py --scenario text --input questions.txt --output answers.md
+  python main.py --scenario code --max-iterations 5
+  python main.py --scenario merge --merge-dir . --ext .cs .py
+  python tools/merge_docs.py . --ext .cs --output project_context.txt
+        """,
     )
     parser.add_argument(
         "--scenario", "-s",
@@ -138,6 +173,11 @@ def parse_args():
         help="Файлы для прикрепления к сообщению"
     )
     parser.add_argument(
+        "--paste-clipboard",
+        action="store_true",
+        help="Вставить файлы из буфера обмена (Ctrl+V)"
+    )
+    parser.add_argument(
         "--email",
         default=None,
         help="Email для входа в DeepSeek (или DEEPSEEK_EMAIL env)"
@@ -151,6 +191,17 @@ def parse_args():
         "--list-scenarios",
         action="store_true",
         help="Показать доступные сценарии и выйти"
+    )
+    parser.add_argument(
+        "--merge-dir",
+        default=".",
+        help="Директория для сведения документов (сценарий merge)"
+    )
+    parser.add_argument(
+        "--ext",
+        nargs="+",
+        default=None,
+        help="Расширения файлов для merge (по умолчанию: .cs .py .xaml и др.)"
     )
     return parser.parse_args()
 
@@ -183,10 +234,16 @@ def build_config(cli_args=None):
         cfg["auto_send_results"] = False
     if args.files:
         cfg["files"] = args.files
+    cfg["paste_clipboard"] = args.paste_clipboard
     cfg["create_new_chat"] = cfg.get("create_new_chat", False) or args.new_chat
     cfg["debug_port"] = args.debug_port
     cfg["email"] = args.email or os.environ.get("DEEPSEEK_EMAIL", "")
     cfg["password"] = args.password or os.environ.get("DEEPSEEK_PASSWORD", "")
+
+    if scenario_name == "merge":
+        cfg["merge_dir"] = args.merge_dir
+        if args.ext:
+            cfg["extensions"] = args.ext
 
     return scenario_name, cfg, args
 

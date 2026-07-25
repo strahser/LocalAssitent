@@ -1,0 +1,13 @@
+{
+  "extensions": [".cs", ".py", ".xaml", ".csproj", ".sln", ".json", ".xml", ".config"],
+  "exclude_dirs": [
+    "__pycache__", ".git", ".venv", "venv", "node_modules",
+    "build", "dist", ".idea", ".vs", "bin", "obj", "packages"
+  ],
+  "max_file_size": 100000,
+  "output_file": "merged_context.txt",
+  "encoding": "utf-8",
+  "add_summary": true,
+  "include_patterns": [],
+  "exclude_patterns": ["*Tests*", "*test_*"]
+}

@@ -1,9 +1,14 @@
 import os
 import sys
+from tools.safety import safe_join
 
 
 def read_file(path: str, offset: int = 0, limit: int = 2000) -> str:
-    abs_path = os.path.abspath(path)
+    try:
+        abs_path = safe_join(path)
+    except ValueError as e:
+        return f"ERROR: {e}"
+    
     if not os.path.exists(abs_path):
         return f"ERROR: File not found: {path}"
     if not os.path.isfile(abs_path):

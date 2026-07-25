@@ -1,9 +1,14 @@
 import os
 import sys
+from tools.safety import safe_join
 
 
 def write_file(path: str, content: str, force: bool = False) -> str:
-    abs_path = os.path.abspath(path)
+    try:
+        abs_path = safe_join(path)
+    except ValueError as e:
+        return f"ERROR: {e}"
+    
     if os.path.exists(abs_path) and not force:
         return f"WARNING: File already exists: {path}. Set force=True to overwrite."
 

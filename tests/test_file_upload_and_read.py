@@ -10,7 +10,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent.DeepSeekClient import DeepSeekClient
-from Logger import Logger
+from logger import Logger
 
 
 def main():

@@ -1,0 +1,5 @@
+selenium>=4.0.0
+pywin32>=300
+python-dotenv>=1.0.0
+pytest>=7.0.0
+pytest-mock>=3.10.0

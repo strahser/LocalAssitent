@@ -44,7 +44,7 @@ class ActionPanelFinder:
             try:
                 current = current.find_element(By.XPATH, "..")
                 level += 1
-            except:
+            except Exception:
                 break
 
         if self.logger:

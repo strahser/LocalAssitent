@@ -26,7 +26,7 @@ def grep_search(pattern: str, root: str = ".", include: str = "*.py", max_result
                             results.append(f"{rel}:{i}: {line.rstrip()}")
                             if len(results) >= max_results:
                                 break
-            except:
+            except Exception:
                 continue
             if len(results) >= max_results:
                 break

@@ -1,10 +1,28 @@
 import time
+from functools import wraps
 from typing import Optional, List
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, StaleElementReferenceException
+
+
+def retry_on_stale(max_retries: int = 3, delay: float = 0.3):
+    """Декоратор для повторных попыток при StaleElementReferenceException."""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exc = None
+            for _ in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except StaleElementReferenceException as e:
+                    last_exc = e
+                    time.sleep(delay)
+            raise last_exc
+        return wrapper
+    return decorator
 
 
 class ElementFinder:
@@ -17,6 +35,7 @@ class ElementFinder:
     #  Сообщения ассистента
     # ──────────────────────────────
 
+    @retry_on_stale()
     def find_assistant_messages(self) -> List[WebElement]:
         xpaths = self.selectors.get("assistant_messages", [])
         if isinstance(xpaths, str):
@@ -34,7 +53,7 @@ class ElementFinder:
             if articles:
                 self.logger.log(f"✅ Найдено {len(articles)} элементов <article>")
                 return articles
-        except:
+        except Exception:
             pass
         self.logger.log("❌ Сообщения не найдены ни по одному селектору.", "ERROR")
         return []
@@ -43,6 +62,7 @@ class ElementFinder:
     #  Поле ввода
     # ──────────────────────────────
 
+    @retry_on_stale()
     def find_input_box(self, timeout: int = 15) -> Optional[WebElement]:
         selectors = self.selectors.get("input_textarea", [])
         if isinstance(selectors, str):
@@ -66,6 +86,7 @@ class ElementFinder:
     #  Кнопка отправки
     # ──────────────────────────────
 
+    @retry_on_stale()
     def find_send_button(self) -> Optional[WebElement]:
         try:
             buttons = self.driver.find_elements(By.CSS_SELECTOR, "div[role='button']")
@@ -81,6 +102,7 @@ class ElementFinder:
     #  Блоки кода внутри сообщения
     # ──────────────────────────────
 
+    @retry_on_stale()
     def find_code_blocks(self, message_element: WebElement) -> List[WebElement]:
         """Ищет блоки div.md-code-block внутри сообщения."""
         selectors = self.selectors.get("code_block", ["div.md-code-block"])
@@ -96,6 +118,7 @@ class ElementFinder:
                 self.logger.log(f"Ошибка поиска блоков кода ({sel}): {e}", "WARNING")
         return []
 
+    @retry_on_stale()
     def find_code_copy_button(self, code_block: WebElement) -> Optional[WebElement]:
         """Ищет кнопку 'Copy' внутри блока кода."""
         selectors = self.selectors.get("code_block_copy_button", [])
@@ -123,6 +146,7 @@ class ElementFinder:
     #  Кнопка копирования сообщения
     # ──────────────────────────────
 
+    @retry_on_stale()
     def find_copy_button_in_message(self, message_element: WebElement) -> Optional[WebElement]:
         try:
             flex_containers = message_element.find_elements(By.CSS_SELECTOR, "div.ds-flex")
@@ -146,6 +170,7 @@ class ElementFinder:
     #  Прикрепление файлов
     # ──────────────────────────────
 
+    @retry_on_stale()
     def find_attach_button(self) -> Optional[WebElement]:
         """Ищет кнопку прикрепления файлов."""
         selectors = self.selectors.get("attach_button", [])
@@ -179,6 +204,7 @@ class ElementFinder:
                 continue
         return None
 
+    @retry_on_stale()
     def find_file_input(self) -> Optional[WebElement]:
         """Ищет скрытый input[type='file']."""
         try:

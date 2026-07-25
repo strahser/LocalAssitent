@@ -6,3 +6,12 @@ __pycache__/
 logs/
 backups/
 .DS_Store
+.env
+.idea/
+.venv/
+pipeline_output/
+.last_response.txt
+context.txt
+project_context.txt
+merged_output.txt
+*.log

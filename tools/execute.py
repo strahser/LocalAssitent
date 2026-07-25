@@ -2,16 +2,48 @@ import subprocess
 import sys
 import tempfile
 import os
+import re
+
+
+DANGEROUS_PATTERNS = [
+    r'os\.',
+    r'subprocess\.',
+    r'__import__',
+    r'eval\(',
+    r'exec\(',
+    r'open\(',
+    r'file\(',
+    r'sys\.',
+    r'socket\.',
+    r'requests\.',
+    r'urllib\.',
+    r'httplib\.',
+]
+
+
+def check_code_safety(code: str) -> str:
+    """
+    Проверяет код на наличие опасных паттернов.
+    Возвращает None если код безопасен, иначе описание проблемы.
+    """
+    for pattern in DANGEROUS_PATTERNS:
+        if re.search(pattern, code):
+            return f"Код содержит запрещённую операцию: {pattern}"
+    return None
 
 
 def execute_code(code: str, timeout: int = 30) -> str:
+    safety_error = check_code_safety(code)
+    if safety_error:
+        return f"ERROR: {safety_error}"
+    
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as f:
         f.write(code)
         tmpfile = f.name
 
     try:
         result = subprocess.run(
-            [sys.executable, tmpfile],
+            [sys.executable, "-S", tmpfile],
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -31,7 +63,7 @@ def execute_code(code: str, timeout: int = 30) -> str:
     finally:
         try:
             os.unlink(tmpfile)
-        except:
+        except Exception:
             pass
 
 

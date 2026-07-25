@@ -1,7 +1,13 @@
+import sys
 import time
 from datetime import datetime
 
-# ------------------- Логгер -------------------
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
+
 class Logger:
     def __init__(self, log_to_html=False, log_to_file=False, save_responses=False,
                  log_file="assistant.log", html_file="log.html"):
@@ -12,7 +18,6 @@ class Logger:
         self.log_file = log_file
 
         if self.log_to_html:
-            # Очищаем старый HTML при запуске
             with open(self.html_file, "w", encoding="utf-8") as f:
                 f.write("<html><body>\n")
         if self.log_to_file:
@@ -22,7 +27,10 @@ class Logger:
     def log(self, message, level="INFO"):
         timestamp = datetime.now().strftime("%H:%M:%S")
         text = f"[{timestamp}] [{level}] {message}"
-        print(text)  # всегда в консоль
+        try:
+            print(text)
+        except UnicodeEncodeError:
+            print(text.encode("utf-8", errors="replace").decode("utf-8"))
 
         if self.log_to_file:
             with open(self.log_file, "a", encoding="utf-8") as f:

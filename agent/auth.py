@@ -56,7 +56,7 @@ class DeepSeekAuth:
             for selector in SELECTORS["logged_in_indicator"]:
                 if self.driver.find_elements(By.CSS_SELECTOR, selector):
                     return True
-        except:
+        except Exception:
             pass
         return False
 
@@ -67,7 +67,7 @@ class DeepSeekAuth:
                 return True
             if self.driver.find_elements(By.CSS_SELECTOR, "input[placeholder*='телефон']"):
                 return True
-        except:
+        except Exception:
             pass
         return False
 

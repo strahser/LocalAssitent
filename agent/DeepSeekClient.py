@@ -1,6 +1,6 @@
 from typing import Optional, Tuple
 from config import SELENIUM_CONFIG
-from agent.selenium_client import SeleniumDeepSeekClient
+from agent.client import SeleniumDeepSeekClient
 
 
 class DeepSeekClient:
@@ -36,6 +36,10 @@ class DeepSeekClient:
     def attach_files(self, file_paths: list) -> bool:
         """Прикрепляет файлы к сообщению."""
         return self.selenium_client.attach_files(file_paths)
+
+    def paste_files_from_clipboard(self) -> bool:
+        """Вставляет файлы из буфера обмена через Ctrl+V."""
+        return self.selenium_client.paste_files_from_clipboard()
 
     def new_chat(self):
         self.logger.log("🔄 Создание нового чата...")

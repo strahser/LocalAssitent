@@ -71,7 +71,7 @@ class CopyButtonAppearanceStrategy(ResponseReadyStrategy):
                     if messages:
                         last_message_element = messages[-1]
                         continue
-                except:
+                except Exception:
                     pass
             time.sleep(self.check_interval)
         return False, "таймаут ожидания кнопки (блок кода)"
