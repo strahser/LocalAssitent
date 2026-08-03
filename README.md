@@ -38,9 +38,10 @@ LocalAssitent/
 │   └── action_panel.py
 │
 ├── tools/                   # Утилиты
-│   ├── merge_docs.py        # Сведение документов
+│   ├── registry.py / cli.py / __main__.py   # Реестр + CLI `python -m tools`
 │   ├── safety.py / read_file.py / write_file.py
-│   ├── search.py / execute.py / list_dir.py
+│   ├── edit_file.py / append_file.py / delete_file.py
+│   ├── search.py / execute.py / list_dir.py / merge_docs.py
 │
 ├── scripts/                 # Утилитарные скрипты
 │   ├── feedback.py          # Обратная связь от DeepSeek
@@ -124,6 +125,28 @@ python tools/merge_docs.py . --config merge_config.json
 | `--prompt-file` | Файл с промптом |
 | `--config` | JSON-конфигурационный файл |
 | `--no-summary` | Без сводной таблицы |
+
+## Tools CLI
+
+Пакет `tools/` имеет единый CLI через реестр (`tools/registry.py`):
+
+```bash
+# Список инструментов
+python -m tools --list
+
+# Чтение файла (позиционные аргументы маппятся по сигнатуре)
+python -m tools read_file tools/safety.py
+
+# Поиск с флагами (--name value / --name=value / --flag; дефисы → подчёркивания)
+python -m tools grep_search TODO --include "*.py" --max-results 10
+
+# Точечное редактирование / дозапись / удаление (через safe_join из tools/safety.py)
+python -m tools edit_file --path src/x.py --old-text "a" --new-text "b"
+python -m tools append_file --path notes.md --content "текст"
+python -m tools delete_file --path tmp.txt
+```
+
+Все файловые операции проходят через `tools/safety.py` (`safe_join` / `is_safe_path`), запрещающий выход за пределы корня проекта.
 
 ## Тесты
 

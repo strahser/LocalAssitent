@@ -1,65 +1,73 @@
-"""
-local_data_agent.py — поиск по локальным файлам проекта.
+"""local_data_agent.py — агент поиска данных в локальных файлах.
+Вместо собственной реализации _search_files используется штатный
+инструмент tools.search.grep_search. Контракт результата:
+AgentResult(ok, [{"path", "line", "snippet"}], error).
 
-Обходит директорию (os.walk), пропуская служебные каталоги,
-и ищет в текстовых файлах строки, содержащие ключевое слово.
-Возвращает список {"path", "line", "snippet"}.
+Совместимость: принимает и `query` (старое имя), и `pattern` (новое).
 """
-import os
-from typing import List
+from __future__ import annotations
+import re
+from typing import Any, Dict, List
 
 from agents.base import AgentResult, BaseAgent
+from tools.search import grep_search
 
-EXCLUDE_DIRS = {
-    "__pycache__", ".git", ".venv", "venv", "node_modules",
-    "build", "dist", ".opencode", ".idea",
-}
-TEXT_EXTENSIONS = {
+# Расширения текстовых файлов (старое поведение агента).
+TEXT_EXTENSIONS = (
     ".py", ".cs", ".xaml", ".csproj", ".json", ".xml", ".md", ".txt", ".config",
-}
+)
+
+_LINE_RE = re.compile(r"^(?P<path>.+?):(?P<line>\d+):\s?(?P<snippet>.*)$")
 
 
-def _search_files(root: str, query: str, max_results: int) -> List[dict]:
-    root = os.path.abspath(root)
-    results = []
-    query_lower = query.lower()
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
-        for fn in filenames:
-            if not fn.lower().endswith(tuple(TEXT_EXTENSIONS)):
-                continue
-            fp = os.path.join(dirpath, fn)
-            try:
-                with open(fp, "r", encoding="utf-8", errors="replace") as f:
-                    for i, line in enumerate(f, start=1):
-                        if query_lower in line.lower():
-                            results.append(
-                                {
-                                    "path": fp,
-                                    "line": i,
-                                    "snippet": line.strip()[:200],
-                                }
-                            )
-                            if len(results) >= max_results:
-                                return results
-            except OSError:
-                continue
-    return results
+def _parse_grep_output(raw: str) -> List[Dict[str, Any]]:
+    """Разбирает текстовый вывод grep_search в список словарей.
+    Распознаются строки вида `path:line: snippet`; остальные строки
+    (заголовки, «ничего не найдено» и т.п.) пропускаются.
+    """
+    items: List[Dict[str, Any]] = []
+    for line in raw.splitlines():
+        line = line.rstrip()
+        if not line:
+            continue
+        match = _LINE_RE.match(line)
+        if match:
+            items.append(
+                {
+                    "path": match.group("path"),
+                    "line": int(match.group("line")),
+                    "snippet": match.group("snippet"),
+                }
+            )
+    return items
 
 
 class LocalDataAgent(BaseAgent):
-    """Поиск ключевого слова в локальных текстовых файлах."""
+    """Ищет строки в файлах проекта по регулярному выражению."""
 
     name = "local_data"
-    description = "Search local project files for a keyword"
+    description = "Поиск данных в локальных файлах проекта (grep_search)."
 
-    def run(self, query: str, root: str = ".", max_results: int = 10) -> AgentResult:
-        if not query:
-            return AgentResult(False, [], "query is required")
-        if not os.path.isdir(root):
-            return AgentResult(False, [], f"not a directory: {root}")
+    def run(
+        self,
+        pattern: str = "",
+        query: str = "",
+        root: str = ".",
+        include: str = "",
+        max_results: int = 30,
+        **kwargs: Any,
+    ) -> AgentResult:
+        needle = pattern or query
+        if not needle:
+            return AgentResult(ok=False, data=[], error="не задан запрос (query/pattern)")
+        if not include:
+            include = ",".join(TEXT_EXTENSIONS)
         try:
-            results = _search_files(root, query, max_results)
-        except Exception as exc:
-            return AgentResult(False, [], f"search failed: {exc}")
-        return AgentResult(True, results)
+            raw = grep_search(
+                needle, root=root, include=include, max_results=max_results
+            )
+        except Exception as exc:  # noqa: BLE001
+            return AgentResult(
+                ok=False, data=[], error=f"{type(exc).__name__}: {exc}"
+            )
+        return AgentResult(ok=True, data=_parse_grep_output(raw), error=None)

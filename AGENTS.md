@@ -14,7 +14,7 @@
 ## Structure
 - `agent/` — Selenium DeepSeek client (BrowserManager, handlers/, auth, clipboard)
 - `detection/` — DOM element finders + selectors (element_finder.py, selectors.py, response_ready.py, action_panel.py)
-- `tools/` — merge_docs, search (grep_search/glob_search), read_file, write_file, execute, safety, list_dir
+- `tools/` — инструменты: merge_docs, search (grep_search/glob_search), read_file, write_file, execute, safety, list_dir, edit_file, append_file, delete_file, registry, cli, __main__; регистрируются в tools/registry.py
 - `agents/` — pluggable local agents (web_search, page_parser, local_data, qa, browser, merge); BaseAgent in agents/base.py
 - `qwen/` — chat.qwen.ai automation (html_monitor.py, dnd_uploader.py, selectors.py, client.py); CLI in scripts/qwen_task.py
 - `scripts/`, `tests/`, `docs/`, `prompts/`
@@ -22,6 +22,14 @@
 ## Agent CLI
 - `python -m agents --list`
 - `python -m agents <name> --query "..."`
+
+## Tools CLI
+- `python -m tools --list`
+- `python -m tools read_file tools/safety.py` (позиционные аргументы маппятся по сигнатуре)
+- `python -m tools grep_search TODO --include "*.py" --max-results 10` (флаги --name value / --name=value / --flag; дефисы → подчёркивания)
+- `python -m tools edit_file --path src/x.py --old-text "a" --new-text "b"`
+- `python -m tools append_file --path notes.md --content "текст"`
+- `python -m tools delete_file --path tmp.txt`
 
 ## Conventions
 - tests/ prepend repo root to sys.path, then `from tools.X import Y`

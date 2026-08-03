@@ -57,7 +57,7 @@ def main(argv=None) -> int:
     client = QwenClient(logger, url=args.url)
 
     logger.log(f"🚀 qwen_task: file={args.file}")
-    client.connect(port=args.port)
+    client.connect(debug_port=args.port)
 
     result = client.run_task(
         file_path=args.file,
