@@ -1,18 +1,17 @@
 # Mission Status
 
 ## Progress
-- .opencode/todo.md: 100% complete
+- .opencode/todo.md: 11/11 ([100%] pending Reviewer [x])
 - Issues: 0 unresolved
 - Workers: 0 active
-- Verification Strategy: Reviewer ran full pytest suite + standalone runners + CLI live checks
-- Execution Status: pass
+- Verification Strategy: Reviewer runs full pytest suite, verifies imports + CLI, marks todo [x]
+- Execution Status: running
 
 ## Current Phase
-CONCLUDED — mission complete
+M3: Verification (Reviewer task_ef2b6465 in progress)
 
-## Summary
-- Deployed `agents/` package: BaseAgent framework, registry, 6 agents (web_search, page_parser, local_data, qa, browser, merge), CLI (`python -m agents`)
-- Created AGENTS.md for the repo
-- Added tests/test_agents.py (25 tests) + fixed 3 pre-existing test-collection bugs
-- Full suite: 51 passed, 0 errors
-- Committed and pushed to origin/v1 (e5e25af)
+## Evidence So Far
+- `python -m pytest tests/test_qwen_*.py -q` → 39 passed (qwen tests)
+- `python -m pytest tests -q` → 90 passed (full suite)
+- AGENTS.md updated (qwen commands + qwen/ structure)
+- Git: branch v1, 3 new test files + qwen/ + scripts/qwen_task.py untracked, AGENTS.md modified

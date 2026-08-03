@@ -8,12 +8,15 @@
 - Tests: `python -m pytest tests -q` (pytest style)
 - Standalone runners: `python tests/test_merge_docs.py`, `python tests/test_safety.py` (unittest-style self-runners, runnable directly)
 - New agent tests: `python -m pytest tests/test_agents.py -v`
+- Qwen chat task: `python scripts/qwen_task.py --file <task.md> --prompt "..." [--output qwen_answer.md] [--port 9222]`
+- Qwen tests: `python -m pytest tests/test_qwen_html_monitor.py tests/test_qwen_dnd_uploader.py tests/test_qwen_client.py -q`
 
 ## Structure
 - `agent/` — Selenium DeepSeek client (BrowserManager, handlers/, auth, clipboard)
 - `detection/` — DOM element finders + selectors (element_finder.py, selectors.py, response_ready.py, action_panel.py)
 - `tools/` — merge_docs, search (grep_search/glob_search), read_file, write_file, execute, safety, list_dir
 - `agents/` — pluggable local agents (web_search, page_parser, local_data, qa, browser, merge); BaseAgent in agents/base.py
+- `qwen/` — chat.qwen.ai automation (html_monitor.py, dnd_uploader.py, selectors.py, client.py); CLI in scripts/qwen_task.py
 - `scripts/`, `tests/`, `docs/`, `prompts/`
 
 ## Agent CLI
