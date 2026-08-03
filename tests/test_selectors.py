@@ -133,12 +133,18 @@ def test_css(html, css_selector, expected_min=1):
     return count >= expected_min
 
 
+test_css.__test__ = False
+
+
 def test_regex(html, pattern, desc, expected_min=1):
     matches = re.findall(pattern, html)
     count = len(matches)
     status = "PASS" if count >= expected_min else "FAIL"
     print(f"  [{status}] Regex '{desc}': found {count} (expected >= {expected_min})")
     return count >= expected_min
+
+
+test_regex.__test__ = False
 
 
 def run_tests():

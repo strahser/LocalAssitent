@@ -1,0 +1,50 @@
+# Work Log
+
+## Active Sessions
+- [x] ses_1 (Worker): `AGENTS.md` - done
+- [x] ses_2 (Worker): `agents/` package + `tests/test_agents.py` - done
+
+## File Status
+| File | Action | Status | Session | Unit Test | Timestamp | Issue |
+|------|--------|--------|---------|-----------|-----------|-------|
+| AGENTS.md | CREATE | done | ses_1 | - | - | - |
+| agents/base.py | CREATE | done | ses_2 | pass | 2026-08-03T12:17:00 | - |
+| agents/registry.py | CREATE | done | ses_2 | pass | 2026-08-03T12:17:20 | - |
+| agents/web_search_agent.py | CREATE | done | ses_2 | pass | 2026-08-03T12:17:00 | - |
+| agents/page_parser_agent.py | CREATE | done | ses_2 | pass | 2026-08-03T12:17:00 | - |
+| agents/local_data_agent.py | CREATE | done | ses_2 | pass | 2026-08-03T12:17:00 | - |
+| agents/qa_agent.py | CREATE | done | ses_2 | pass | 2026-08-03T12:17:15 | - |
+| agents/browser_agent.py | CREATE | done | ses_2 | pass | 2026-08-03T12:17:23 | - |
+| agents/merge_agent.py | CREATE | done | ses_2 | pass | 2026-08-03T12:17:24 | - |
+| agents/__init__.py | CREATE | done | ses_2 | pass | 2026-08-03T12:17:34 | - |
+| agents/cli.py | CREATE | done | ses_2 | pass | 2026-08-03T12:17:38 | - |
+| agents/__main__.py | CREATE | done | ses_2 | pass | 2026-08-03T12:17:38 | - |
+| tests/test_agents.py | CREATE | done | ses_2 | pass | 2026-08-03T12:18:02 | - |
+
+## Test Results (ses_2)
+- `python -m pytest tests/test_agents.py -q` -> **25 passed** (clean cache run)
+- CLI smoke: `python -m agents --list` -> lists base, web_search, page_parser, local_data, qa, browser, merge
+- CLI smoke: `python -m agents local_data --query merge_documents --root tools` -> ok=true
+
+## Pre-existing issues (NOT caused by ses_2, out of scope)
+- `python -m pytest tests` collection aborts on 2 OLD modules:
+  - tests/test_file_upload_and_read.py, tests/test_pipeline.py
+  - Cause: `ModuleNotFoundError: No module named 'logger'` (from pipeline.py/logger import Logger)
+  - Reproduced in plain python from repo root; Logger.py exists on disk but `import logger` fails on this machine (Python 3.13.1). Unrelated to agents/.
+- tests/test_selectors.py may also show pre-existing collection errors.
+
+## Verification (Reviewer, FULL SYSTEM PASS) — 2026-08-03T12:28Z
+- `python -m pytest tests -q` -> **51 passed in 0.51s**, 0 errors, 0 failures, exit=0
+- Standalone: `python tests/test_merge_docs.py` -> 12/12 passed; `python tests/test_safety.py` -> OK (8 tests); `python tests/test_selectors.py` -> 13/13 passed
+- CLI: `python -m agents --list` -> base, browser, local_data, merge, page_parser, qa, web_search (7 agents, exit=0)
+- CLI: `python -m agents local_data --query "class BaseAgent" --root agents` -> ok:true, result points at agents/base.py:30
+- CLI error path: `python -m agents nonexistent_xyz` -> exit=1, "ERROR: 'Unknown agent: nonexistent_xyz'", no traceback
+- AGENTS.md: 34 lines / 1910 bytes (non-trivial) at repo root
+- git status: modified exactly config.py, pipeline.py, tests/test_file_upload_and_read.py, tests/test_pipeline.py, tests/test_selectors.py (diffs match the 3 bug fixes); untracked: .opencode/, AGENTS.md, Task_Editiona_Agents.txt, agents/, tests/test_agents.py
+- Secrets: .gitignore covers `.env` (line 9) and `.venv/`; only .env.example on disk (template); secret scan of new files clean
+- Result: **VERIFICATION PASSED** — M3/T3.1/S3.1.1 + S3.1.2 marked [x] in todo.md
+
+## Pending Integration
+- agents/ package (VERIFIED)
+- AGENTS.md (VERIFIED)
+- M4 Commit + Push (pending, depends on Commander go-ahead)

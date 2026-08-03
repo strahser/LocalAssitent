@@ -8,7 +8,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pipeline import collect_project_code, KEY_FILES, PROMPT_TEMPLATE
+from pipeline import collect_project_code, PIPELINE_FILES, DEFAULT_PROMPT
 
 
 class TestPipeline(unittest.TestCase):
@@ -17,7 +17,7 @@ class TestPipeline(unittest.TestCase):
         """Все указанные файлы должны существовать."""
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         missing = []
-        for f in KEY_FILES:
+        for f in PIPELINE_FILES:
             if not os.path.exists(os.path.join(root, f)):
                 missing.append(f)
         self.assertEqual(missing, [], f"Файлы не найдены: {missing}")
@@ -31,14 +31,14 @@ class TestPipeline(unittest.TestCase):
     def test_collect_code_contains_files(self):
         """Собранный код должен содержать маркеры каждого файла."""
         code = collect_project_code()
-        for f in KEY_FILES:
+        for f in PIPELINE_FILES:
             marker = f"### Файл: {f}"
             self.assertIn(marker, code, f"Маркер '{marker}' не найден в собранном коде")
 
     def test_prompt_template_formatting(self):
         """Промпт должен корректно форматироваться с кодом."""
         code = collect_project_code()
-        prompt = PROMPT_TEMPLATE.format(code=code)
+        prompt = DEFAULT_PROMPT.format(code=code)
         self.assertIn("LocalAssitent", prompt)
         self.assertGreater(len(prompt), 5000)
 

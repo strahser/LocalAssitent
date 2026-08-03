@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import SELENIUM_CONFIG, PIPELINE_FILES
 from agent.DeepSeekClient import DeepSeekClient
-from logger import Logger
+from Logger import Logger
 
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
