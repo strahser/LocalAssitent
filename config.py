@@ -20,7 +20,7 @@ PIPELINE_FILES = [
     "extractors.py",
     "rules.py",
     "Logger.py",
-    "agent/DeepSeekClient.py",
+    "agent/deepseek_client.py",
     "agent/client.py",
     "agent/auth.py",
     "agent/clipboard.py",

@@ -9,7 +9,7 @@ except Exception:
     pass
 
 import config
-from agent.DeepSeekClient import DeepSeekClient
+from agent.deepseek_client import DeepSeekClient
 from logger import Logger
 from scenarios import ScenarioFactory
 

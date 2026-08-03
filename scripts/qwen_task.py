@@ -18,7 +18,7 @@ try:
 except Exception:
     pass
 
-from Logger import Logger
+from logger import Logger
 from qwen.client import QwenClient
 
 

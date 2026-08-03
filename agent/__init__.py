@@ -1,1 +1,1 @@
-from .DeepSeekClient import DeepSeekClient
+from .deepseek_client import DeepSeekClient

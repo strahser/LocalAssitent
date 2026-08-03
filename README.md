@@ -22,8 +22,10 @@ LocalAssitent/
 ├── extractors.py            # Парсер кода из ответов
 ├── rules.py                 # Синтаксис + выполнение
 ├── logger.py                # Логгер
+├── launch.py                # Быстрый запуск pipeline (dotenv + run_pipeline)
+├── merge_config.json        # Пример JSON-конфига для merge_docs
 │
-├── agent/                   # Браузерный агент
+├── agent/                   # Браузерный агент (Selenium DeepSeek)
 │   ├── client.py            # SeleniumDeepSeekClient
 │   ├── DeepSeekClient.py    # Обёртка-клиент
 │   ├── auth.py              # Авторизация
@@ -31,17 +33,24 @@ LocalAssitent/
 │   ├── browser/manager.py   # Управление Edge
 │   └── handlers/            # Отправка, чтение, аттач файлов
 │
+├── agents/                  # Плагинные агенты (registry + cli + __main__)
+│   ├── base.py / registry.py / cli.py / __main__.py
+│   └── web_search / page_parser / local_data / qa / browser / merge
+│
 ├── detection/               # Поиск DOM-элементов
 │   ├── element_finder.py
 │   ├── selectors.py
 │   ├── response_ready.py
 │   └── action_panel.py
 │
-├── tools/                   # Утилиты
-│   ├── registry.py / cli.py / __main__.py   # Реестр + CLI `python -m tools`
+├── tools/                   # Утилиты (registry + CLI `python -m tools`)
+│   ├── registry.py / cli.py / __main__.py
 │   ├── safety.py / read_file.py / write_file.py
 │   ├── edit_file.py / append_file.py / delete_file.py
 │   ├── search.py / execute.py / list_dir.py / merge_docs.py
+│
+├── qwen/                    # chat.qwen.ai автоматизация
+│   ├── client.py / html_monitor.py / dnd_uploader.py / selectors.py
 │
 ├── scripts/                 # Утилитарные скрипты
 │   ├── feedback.py          # Обратная связь от DeepSeek
@@ -52,7 +61,7 @@ LocalAssitent/
 │   ├── apply_cloud.py       # Применение ответа облачного ИИ (docs/AI_TASK_*.md)
 │   └── test_send.py
 │
-├── tests/                   # Тесты
+├── tests/                   # Тесты (python -m pytest tests -q)
 ├── docs/                    # Документация + архивы AI_TASK (спеки и ответы ИИ)
 └── prompts/                 # Промпты для ИИ
 ```
