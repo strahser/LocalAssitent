@@ -1,5 +1,5 @@
 """
-apply_cloudai.py — применение ответа облачного ИИ (AI_TASK_Tools_CloudAI_Responce.md).
+apply_cloudai.py — применение ответа облачного ИИ (docs/AI_TASK_Tools_CloudAI_Responce.md).
 
 Парсер:
 - ищет строки-заголовки секций вида «^<путь>/<файл>.py$» (по одному на строку);
@@ -17,8 +17,9 @@ import os
 import re
 import sys
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
-RESP = os.path.join(ROOT, "AI_TASK_Tools_CloudAI_Responce.md")
+# скрипт живёт в scripts/, поэтому корень проекта — на уровень выше
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RESP = os.path.join(ROOT, "docs", "AI_TASK_Tools_CloudAI_Responce.md")
 
 NAME_FIX = {
     "tools/main.py": "tools/__main__.py",

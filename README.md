@@ -48,10 +48,12 @@ LocalAssitent/
 │   ├── run_analysis.py
 │   ├── wait_and_read.py
 │   ├── read_response.py
+│   ├── qwen_task.py         # Задача для chat.qwen.ai через Edge CDP
+│   ├── apply_cloud.py       # Применение ответа облачного ИИ (docs/AI_TASK_*.md)
 │   └── test_send.py
 │
 ├── tests/                   # Тесты
-├── docs/                    # Документация
+├── docs/                    # Документация + архивы AI_TASK (спеки и ответы ИИ)
 └── prompts/                 # Промпты для ИИ
 ```
 
