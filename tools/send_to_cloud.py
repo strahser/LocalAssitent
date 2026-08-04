@@ -22,7 +22,7 @@ def _build_client(provider: str, logger, email: str = "", password: str = ""):
     if provider == "qwen":
         from agent.QwenClient import QwenClient
         return QwenClient(logger, email=email, password=password)
-    from agent.DeepSeekClient import DeepSeekClient
+    from agent.deepseek_client import DeepSeekClient
     return DeepSeekClient(logger, email=email, password=password)
 
 
@@ -49,7 +49,7 @@ def send_to_cloud(
         Строка вида "OK: ..." или "ERROR: ..." (конвенция tools-модулей).
     """
     try:
-        from Logger import Logger
+        from logger import Logger
         from config import PROVIDERS, DEFAULT_QWEN_MODEL
     except Exception as e:
         return f"ERROR: не удалось импортировать config/logger: {e}"

@@ -17,7 +17,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from agent.clipboard import ClipboardManager
 from detection.element_finder import ElementFinder
 from config import SELENIUM_CONFIG
-from Logger import Logger
+from logger import Logger
 
 
 def read_response():

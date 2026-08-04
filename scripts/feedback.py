@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agent.client import SeleniumDeepSeekClient
 from agent.QwenClient import QwenClient, build_qwen_config
-from Logger import Logger
+from logger import Logger
 from config import SELENIUM_CONFIG, DEFAULT_QWEN_MODEL
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

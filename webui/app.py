@@ -27,7 +27,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from Logger import Logger
+from logger import Logger
 from config import PROVIDERS, QWEN_MODELS, DEFAULT_MODEL, SCENARIO_CONFIGS
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -97,7 +97,7 @@ def connect_client(provider: str, model: Optional[str] = None,
             except Exception as e:
                 lg.log(f"⚠️ Не удалось выбрать модель {model}: {e}", "WARNING")
     else:
-        from agent.DeepSeekClient import DeepSeekClient
+        from agent.deepseek_client import DeepSeekClient
         client = DeepSeekClient(lg, email=email, password=password)
 
     session.client = client
