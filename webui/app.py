@@ -188,6 +188,58 @@ def _collect_context_to(directory: str, out_name: str) -> str:
     return content, out
 
 
+def _safe_filename(name: str) -> str:
+    """Оставляет только имя файла (без путей), не допускает выхода из pipeline_output."""
+    name = os.path.basename((name or "").replace("\\", "/").strip())
+    if not name or name in (".", "..") or not name.lower().endswith((".txt", ".md", ".json")):
+        return "cloud_context.txt"
+    return name
+
+
+def collect_to_file(directories, project_type: str = "auto",
+                    filename: str = "cloud_context.txt") -> dict:
+    """Собирает файлы нескольких директорий в один TXT (переиспользует tools.collect_context).
+
+    project_type: auto | cs | py. Для auto тип определяется автоматически;
+    для cs/py все указанные директории считаются этого типа.
+    """
+    dirs = [d for d in (directories or []) if isinstance(d, str) and d.strip()]
+    out_name = _safe_filename(filename)
+    out = str(PROJECT_ROOT / "pipeline_output" / out_name)
+    lg = get_logger()
+
+    if not dirs:
+        raise ValueError("Укажите хотя бы одну директорию.")
+
+    for d in dirs:
+        p = Path(d)
+        if not p.is_dir():
+            raise ValueError(f"Директория не найдена: {d}")
+
+    project_types = None
+    if project_type in ("cs", "py", "mixed"):
+        project_types = {str(Path(d).resolve()): project_type for d in dirs}
+
+    lg.log(f"🖨️ Копирование в один файл: {len(dirs)} директорий, тип={project_type} → {out_name}")
+    from tools.collect_context import collect_context
+    res = collect_context(
+        dirs,
+        output_file=out,
+        project_types=project_types,
+        add_task=True,
+        add_summary=True,
+    )
+    size = Path(out).stat().st_size
+    lg.log(f"🖨️ {res}")
+    return {
+        "message": res,
+        "file": out_name,
+        "path": out,
+        "size": size,
+        "download_url": f"/api/file?name={out_name}",
+    }
+
+
 def run_pipeline(pipeline: str, message: str,
                  directory: Optional[str] = None, new_chat: bool = False) -> dict:
     """Выполняет выбранный пайплайн (под session.lock)."""
@@ -321,6 +373,34 @@ def api_logs(limit: int = 60):
     except Exception:
         return _ok({"logs": []})
     return _ok({"logs": lines[-int(limit):]})
+
+
+@app.post("/api/collect")
+def api_collect(payload: dict):
+    """Скопировать файлы нескольких директорий в один файл (без облачного чата)."""
+    payload = payload or {}
+    try:
+        result = collect_to_file(
+            payload.get("directories"),
+            project_type=payload.get("project_type", "auto"),
+            filename=payload.get("filename", "cloud_context.txt"),
+        )
+        return _ok(result)
+    except ValueError as e:
+        return _fail(str(e))
+    except Exception as e:
+        get_logger().log(f"🖨️ Ошибка: {e}", "WARNING")
+        return _fail(f"Ошибка копирования: {e}", status=500)
+
+
+@app.get("/api/file")
+def api_file(name: str = "cloud_context.txt"):
+    """Отдаёт собранный файл из pipeline_output (только скачивание, без браузера)."""
+    out = Path(PROJECT_ROOT / "pipeline_output") / _safe_filename(name)
+    if not out.exists():
+        return _fail(f"Файл не найден: {name}", status=404)
+    return FileResponse(out, media_type="text/plain; charset=utf-8",
+                        filename=out.name)
 
 
 # ---------------------------------------------------------------------------

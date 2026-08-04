@@ -62,6 +62,7 @@
           <option value="improve">Improve: анализ проекта</option>
         </select>
       </label>
+      <button id="btnHelp" class="btn btn-ghost" type="button">❓ Справка</button>
       <label>Директория (для merge/improve):
         <input id="directory" type="text" placeholder="пусто = проект LocalAssitent">
       </label>
@@ -78,6 +79,30 @@
   </section>
 
   <section class="card">
+    <h2>4. Скопировать данные в один файл</h2>
+    <div class="row">
+      <label>Тип проекта:
+        <select id="collectType">
+          <option value="auto">Авто (определить)</option>
+          <option value="cs">C# (.cs)</option>
+          <option value="py">Python (.py)</option>
+        </select>
+      </label>
+      <label>Имя файла:
+        <input id="collectFilename" type="text" value="cloud_context.txt">
+      </label>
+    </div>
+    <label>Директории (по одной на строку):
+      <textarea id="collectDirs" rows="4"
+        placeholder="d:/Projects/HeatLossRevit2&#10;d:/Projects/my-python-app"></textarea>
+    </label>
+    <div class="row">
+      <button id="btnCollect" class="btn btn-primary">📄 Скопировать в один файл</button>
+    </div>
+    <div id="collectResult" class="collect-result"></div>
+  </section>
+
+  <section class="card">
     <h2>Ответ</h2>
     <div id="note" class="note"></div>
     <div id="output" class="output">—</div>
@@ -88,6 +113,34 @@
     <pre id="logs" class="logs">…</pre>
   </section>
 </main>
+
+<!-- Модальное окно справки по пайплайнам -->
+<div id="helpModal" class="modal hidden">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Справка по пайплайнам</h3>
+      <button id="btnCloseHelp" class="modal-close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="help-item">
+        <h4>💬 Чат: вопрос — ответ (Q&A)</h4>
+        <p>Простой диалог с облачным ИИ. Отправьте вопрос — получите текстовый ответ. Подходит для консультаций, объяснений, brainstorming.</p>
+      </div>
+      <div class="help-item">
+        <h4>💻 Чат: вопрос — код</h4>
+        <p>Специализированный режим для разработки. Опишите задачу — получите готовый код с объяснениями. Оптимизирован для C# и Python.</p>
+      </div>
+      <div class="help-item">
+        <h4>📦 Проект → контекст → облако</h4>
+        <p>Автоматический сбор всех файлов проекта в единый контекст и отправка в облако. Укажите директорию — ИИ проанализирует весь код. Использует фильтр временных файлов (bin, obj, .git и т.д.).</p>
+      </div>
+      <div class="help-item">
+        <h4>🔍 Improve: анализ проекта</h4>
+        <p>Глубокий анализ кода проекта. ИИ изучит структуру, найдёт проблемы, предложит улучшения. Рекомендуется для code review и оптимизации.</p>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script src="/static/app.js"></script>
 </body>

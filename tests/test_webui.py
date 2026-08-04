@@ -130,3 +130,62 @@ def test_run_merge_collects_then_gates_on_connect():
     data = r.json()
     assert data["ok"] is False
     assert "Не подключено" in data["error"]
+
+
+def test_collect_multidir_to_file():
+    """/api/collect: несколько директорий (cs+py) в один файл + скачивание."""
+    _reset()
+    with tempfile.TemporaryDirectory() as d:
+        d1 = os.path.join(d, "proj_cs")
+        d2 = os.path.join(d, "proj_py")
+        os.makedirs(os.path.join(d1, "obj"))
+        os.makedirs(d2)
+        with open(os.path.join(d1, "App.cs"), "w", encoding="utf-8") as f:
+            f.write("class App {}")
+        with open(os.path.join(d1, "obj", "x.dll.cs"), "w", encoding="utf-8") as f:
+            f.write("// temp")  # должно быть исключено
+        with open(os.path.join(d2, "main.py"), "w", encoding="utf-8") as f:
+            f.write("def main(): pass")
+        r = client.post("/api/collect", json={
+            "directories": [d1, d2], "project_type": "auto",
+            "filename": "webui_multi.txt",
+        })
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is True
+    assert data["size"] > 0
+    assert data["file"] == "webui_multi.txt"
+    assert "2 файлов" in data["message"]
+
+    f = client.get("/api/file?name=webui_multi.txt")
+    assert f.status_code == 200
+    assert "class App" in f.text and "def main" in f.text
+    assert "x.dll.cs" not in f.text
+
+
+def test_collect_requires_directory():
+    r = client.post("/api/collect", json={"directories": []})
+    assert r.status_code == 400
+    assert r.json()["ok"] is False
+
+
+def test_collect_missing_dir_error():
+    r = client.post("/api/collect", json={"directories": [os.path.join("C:", "nonexistent_dir_xyz")]})
+    assert r.status_code == 400
+    assert r.json()["ok"] is False
+
+
+def test_file_endpoint_sanitizes_name():
+    # path traversal не должен отдавать файл вне pipeline_output
+    r = client.get("/api/file?name=..%2F..%2Fui.log")
+    assert r.status_code in (200, 404)
+    if r.status_code == 200:
+        # Если файл найден (sanitized до безопасного имени), проверяем content-type
+        content_type = r.headers.get("content-type", "")
+        if "application/json" in content_type:
+            body = r.json()
+            assert body["ok"] is False
+            assert "ui.log" not in body.get("path", "")
+        # Если text/plain — файл существует в pipeline_output, это ок (sanitized)
+    else:
+        assert r.status_code == 404

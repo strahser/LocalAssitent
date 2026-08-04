@@ -65,7 +65,8 @@ input, select, textarea {
   font-size: 13px;
 }
 input, select { min-width: 180px; }
-textarea { width: 100%; resize: vertical; margin-bottom: 10px; font-family: Consolas, monospace; }
+textarea { width: 100%; resize: vertical; margin-bottom: 10px; font-family: Consolas, monospace; min-width: 0; }
+label:has(textarea) { display: block; width: 100%; }
 
 .btn {
   border: 1px solid var(--border);
@@ -125,4 +126,112 @@ textarea { width: 100%; resize: vertical; margin-bottom: 10px; font-family: Cons
   max-height: 220px;
   overflow: auto;
   margin: 0;
+}
+
+.collect-result {
+  margin-top: 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.collect-result pre {
+  background: #0b0d12;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0 0 8px;
+}
+.collect-result .dl {
+  display: inline-block;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+.collect-result .dl:hover { text-decoration: underline; }
+
+/* Модальное окно */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal.hidden { display: none; }
+
+.modal-content {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  max-width: 700px;
+  width: 90%;
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text);
+}
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 28px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: 0.15s;
+}
+.modal-close:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.help-item {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.help-item:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+.help-item h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--accent);
+}
+.help-item p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
 }

@@ -102,10 +102,42 @@ async function refreshLogs() {
   if (d.ok) $('logs').textContent = d.logs.join('\n') || '(пусто)';
 }
 
+async function collect() {
+  const box = $('collectResult');
+  const directories = $('collectDirs').value
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!directories.length) {
+    box.textContent = 'Укажите хотя бы одну директорию.';
+    box.style.color = '#f87171';
+    return;
+  }
+  box.textContent = '⏳ Собираю файлы…';
+  box.style.color = '#4ade80';
+  $('btnCollect').disabled = true;
+  const body = {
+    directories,
+    project_type: $('collectType').value,
+    filename: $('collectFilename').value.trim() || 'cloud_context.txt',
+  };
+  const d = await api('/api/collect', body);
+  if (d.ok) {
+    box.style.color = '#4ade80';
+    box.innerHTML = `<pre>${d.message}</pre>` +
+      `<a class="dl" href="${d.download_url}" target="_blank">⬇️ Скачать: ${d.file} (${d.size} байт)</a>`;
+  } else {
+    box.style.color = '#f87171';
+    box.textContent = '❌ ' + (d.error || 'Ошибка');
+  }
+  $('btnCollect').disabled = false;
+}
+
 /* события */
 $('btnConnect').onclick = connect;
 $('btnDisconnect').onclick = disconnect;
 $('btnRun').onclick = run;
+$('btnCollect').onclick = collect;
 $('btnCopy').onclick = () => {
   const text = $('output').textContent;
   if (text && text !== '—') {
@@ -113,6 +145,13 @@ $('btnCopy').onclick = () => {
   }
 };
 $('provider').onchange = updateModelVisibility;
+
+/* модальное окно справки */
+$('btnHelp').onclick = () => $('helpModal').classList.remove('hidden');
+$('btnCloseHelp').onclick = () => $('helpModal').classList.add('hidden');
+$('helpModal').onclick = (e) => {
+  if (e.target === $('helpModal')) $('helpModal').classList.add('hidden');
+};
 
 /* старт */
 refreshProviders();
