@@ -1,10 +1,11 @@
 """
-Pipeline: Сбор файлов проекта → Запрос к DeepSeek → Сохранение ответа
+Pipeline: Сбор файлов проекта → Запрос в облачный чат (DeepSeek/Qwen) → Сохранение ответа
 
 Использование:
-    python pipeline.py                              # стандартный pipeline
+    python pipeline.py                              # стандартный pipeline (DeepSeek)
     python pipeline.py --merged <файл.txt>          # из merged-файла
     python pipeline.py --prompt-file <промпт.txt>   # свой промпт
+    python pipeline.py --provider qwen --model Qwen3.8-Max-Preview
 """
 import argparse
 import os
@@ -13,8 +14,9 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from config import SELENIUM_CONFIG, PIPELINE_FILES
+from config import SELENIUM_CONFIG, PIPELINE_FILES, DEFAULT_QWEN_MODEL
 from agent.deepseek_client import DeepSeekClient
+from agent.QwenClient import QwenClient
 from logger import Logger
 
 
@@ -64,10 +66,18 @@ def load_merged_file(merged_path: str) -> str:
         return f.read()
 
 
-def run_pipeline(merged_file: str = None, prompt_file: str = None, prompt_text: str = None):
+def build_client(logger, provider, email, password, model, timeout=300):
+    """Создаёт клиент по провайдеру."""
+    if provider == "qwen":
+        return QwenClient(logger, timeout=timeout, email=email, password=password, model=model)
+    return DeepSeekClient(logger, timeout=timeout, email=email, password=password)
+
+
+def run_pipeline(merged_file: str = None, prompt_file: str = None, prompt_text: str = None,
+                 provider: str = "deepseek", model: str = None):
     """Основной pipeline: сбор → запрос → сохранение."""
     print("=" * 60)
-    print("  PIPELINE: Анализ проекта LocalAssitent через DeepSeek")
+    print(f"  PIPELINE: Анализ проекта через {provider}" + (f" ({model})" if model else ""))
     print("=" * 60)
 
     logger = Logger(
@@ -96,13 +106,17 @@ def run_pipeline(merged_file: str = None, prompt_file: str = None, prompt_text: 
         prompt = template.format(code=code) if "{code}" in template else template + "\n\n" + code
         print(f"  Промпт: {len(prompt)} символов")
 
-    print("\n[2/4] Подключение к DeepSeek...")
+    print("\n[2/4] Подключение к облачному чату...")
     timeout = 300
-    client = DeepSeekClient(
+    email_env = f"{provider.upper()}_EMAIL"
+    password_env = f"{provider.upper()}_PASSWORD"
+    client = build_client(
         logger,
+        provider,
+        email=os.environ.get(email_env, os.environ.get("DEEPSEEK_EMAIL", "")),
+        password=os.environ.get(password_env, os.environ.get("DEEPSEEK_PASSWORD", "")),
+        model=model or (DEFAULT_QWEN_MODEL if provider == "qwen" else None),
         timeout=timeout,
-        email=os.environ.get("DEEPSEEK_EMAIL", ""),
-        password=os.environ.get("DEEPSEEK_PASSWORD", ""),
     )
 
     print("\n[3/4] Отправка запроса и ожидание ответа...")
@@ -113,7 +127,7 @@ def run_pipeline(merged_file: str = None, prompt_file: str = None, prompt_text: 
     print(f"  Ответ получен за {elapsed:.1f} секунд")
 
     if result is None:
-        print("\n[!] Не удалось получить ответ от DeepSeek")
+        print(f"\n[!] Не удалось получить ответ от {provider}")
         logger.log("Pipeline завершен с ошибкой: ответ не получен", "ERROR")
         client.close()
         logger.close()
@@ -125,9 +139,10 @@ def run_pipeline(merged_file: str = None, prompt_file: str = None, prompt_text: 
     output_dir = os.path.join(PROJECT_ROOT, "pipeline_output")
     os.makedirs(output_dir, exist_ok=True)
 
-    md_path = os.path.join(output_dir, "deepseek_analysis.md")
+    md_name = "qwen_analysis.md" if provider == "qwen" else "deepseek_analysis.md"
+    md_path = os.path.join(output_dir, md_name)
     with open(md_path, "w", encoding="utf-8") as f:
-        f.write("# Анализ проекта LocalAssitent от DeepSeek\n\n")
+        f.write(f"# Анализ проекта от {provider}" + (f" ({model})" if model else "") + "\n\n")
         f.write(f"**Дата:** {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
         f.write(f"**Время ответа:** {elapsed:.1f} сек\n\n")
         f.write("---\n\n")
@@ -151,23 +166,32 @@ def run_pipeline(merged_file: str = None, prompt_file: str = None, prompt_text: 
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Pipeline анализа проекта через DeepSeek")
+    parser = argparse.ArgumentParser(description="Pipeline анализа проекта через облачный чат")
     parser.add_argument("--merged", help="Путь к merged TXT-файлу (вместо сбора файлов)")
     parser.add_argument("--prompt-file", help="Файл с промптом")
     parser.add_argument("--prompt", help="Текст промпта (inline)")
-    parser.add_argument("--email", default=None, help="Email для DeepSeek")
-    parser.add_argument("--password", default=None, help="Пароль для DeepSeek")
+    parser.add_argument("--email", default=None, help="Email для входа")
+    parser.add_argument("--password", default=None, help="Пароль для входа")
+    parser.add_argument("--provider", default="deepseek", choices=["deepseek", "qwen"],
+                        help="Провайдер облачного чата (по умолчанию: deepseek)")
+    parser.add_argument("--model", default=None,
+                        help=f"Модель (для qwen, по умолчанию: {DEFAULT_QWEN_MODEL})")
     args = parser.parse_args()
 
     if args.email:
+        os.environ[f"{args.provider.upper()}_EMAIL"] = args.email
         os.environ["DEEPSEEK_EMAIL"] = args.email
     if args.password:
+        os.environ[f"{args.provider.upper()}_PASSWORD"] = args.password
         os.environ["DEEPSEEK_PASSWORD"] = args.password
 
+    model = args.model or (DEFAULT_QWEN_MODEL if args.provider == "qwen" else None)
     success = run_pipeline(
         merged_file=args.merged,
         prompt_file=args.prompt_file,
         prompt_text=args.prompt,
+        provider=args.provider,
+        model=model,
     )
     sys.exit(0 if success else 1)
 

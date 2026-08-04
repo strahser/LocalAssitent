@@ -1,0 +1,19 @@
+{
+  "project_type": "auto",
+  "extensions": [],
+  "exclude_dirs": [
+    "bin", "obj", ".git", ".gigacode", ".idea", ".vs", "__pycache__",
+    "node_modules", "venv", ".venv", "build", "dist", "packages",
+    "TestResults", "log", "logs", "publish", ".opencode", "temp"
+  ],
+  "temp_file_patterns": [
+    "*.tmp", "*.log", "*.user", "*.suo", "*.bak", "*.orig", "*.rej",
+    "*.nupkg", "*.cache", "*.pyc", "*.plan.md", "*AssemblyAttributes.cs",
+    "*.g.cs", "*.g.i.cs", "Thumbs.db"
+  ],
+  "max_file_size": 100000,
+  "output_file": "cloud_context.txt",
+  "encoding": "utf-8",
+  "add_task": true,
+  "add_summary": true
+}

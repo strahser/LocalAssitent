@@ -107,11 +107,19 @@ class MessageSender:
         return False
 
     def _click_send_button(self) -> bool:
+        # Сначала селекторы из конфига (у Qwen свой UI: button.send-button),
+        # затем DeepSeek-фолбэки.
         selectors = [
+            "button.send-button:not([disabled])",
+            "button.send-button",
+            "div[role='button'][aria-label='Отправить сообщение']",
+            "div.omni-button-content-btn",
+            "div[role='button'].ant-btn-primary",
             "div.ds-button--circle:not(.ds-button--disabled)",
             "button.ds-button--filled:not(.ds-button--disabled)",
             "div[role='button'].ds-button--primary:not(.ds-button--disabled)",
             "//div[contains(@class, 'ds-button--circle') and not(contains(@class, 'ds-button--disabled'))]",
+            "//div[contains(@class, 'omni-button-content-btn') and not(contains(@class, 'disabled'))]",
         ]
         for sel in selectors:
             try:
@@ -121,7 +129,9 @@ class MessageSender:
                     els = self.driver.find_elements(By.CSS_SELECTOR, sel)
                 for btn in els:
                     if btn.is_displayed():
-                        btn.click()
+                        # JS-клик: Selenium .click() не регистрируется React-кнопкой Qwen,
+                        # а JS-клик отправляет сообщение и очищает поле (проверено live).
+                        self.driver.execute_script("arguments[0].click();", btn)
                         self.logger.log(f"✅ Клик по кнопке: {sel}")
                         return True
             except Exception:

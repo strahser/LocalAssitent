@@ -6,7 +6,7 @@ import shutil
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tools.merge_docs import collect_files, merge_documents, format_file_block
+from tools.merge_docs import collect_files, merge_documents, merge_documents_multi, format_file_block
 from pathlib import Path
 
 
@@ -157,6 +157,50 @@ class TestMergeDocs:
         assert "MERGED PROJECT CONTEXT" in content
         assert "Total files: 1" in content
         assert "Total lines: 2" in content
+
+    def test_merge_documents_multi_two_dirs(self):
+        dir_a = Path(tempfile.mkdtemp())
+        dir_b = Path(tempfile.mkdtemp())
+        try:
+            (dir_a / "a.cs").write_text("class A {}", encoding="utf-8")
+            (dir_b / "b.cs").write_text("class B {}", encoding="utf-8")
+            output = str(self.root / "multi_output.txt")
+
+            result = merge_documents_multi(
+                root_dirs=[str(dir_a), str(dir_b)],
+                output_file=output,
+                extensions=[".cs"],
+            )
+            assert "Готово" in result
+            assert os.path.exists(output)
+
+            content = Path(output).read_text(encoding="utf-8")
+            # оба FILE-заголовка присутствуют
+            assert "FILE: a.cs" in content
+            assert "FILE: b.cs" in content
+            # оба DIR-заголовка присутствуют
+            assert f"DIR: {dir_a.resolve()}" in content
+            assert f"DIR: {dir_b.resolve()}" in content
+            # содержимое обоих файлов объединено
+            assert "class A {}" in content
+            assert "class B {}" in content
+        finally:
+            shutil.rmtree(str(dir_a), ignore_errors=True)
+            shutil.rmtree(str(dir_b), ignore_errors=True)
+
+    def test_merge_documents_multi_single_dir(self):
+        self._create_file("a.cs", "class A {}")
+        output = str(self.root / "multi_one.txt")
+
+        result = merge_documents_multi(
+            root_dirs=[str(self.root)],
+            output_file=output,
+            extensions=[".cs"],
+        )
+        assert "Готово" in result
+        content = Path(output).read_text(encoding="utf-8")
+        assert "FILE: a.cs" in content
+        assert f"DIR: {self.root.resolve()}" in content
 
 
 def run_tests():

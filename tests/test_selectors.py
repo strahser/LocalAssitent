@@ -101,7 +101,7 @@ def count_tags(html, tag, class_name=None, attrs=None):
     return count
 
 
-def test_css(html, css_selector, expected_min=1):
+def check_css(html, css_selector, expected_min=1):
     """Test a CSS-like selector against HTML."""
     # Parse simple CSS selector: tag.class[attr=val], tag.class, .class, tag[attr*=val]
     tag = "*"
@@ -133,18 +133,12 @@ def test_css(html, css_selector, expected_min=1):
     return count >= expected_min
 
 
-test_css.__test__ = False
-
-
-def test_regex(html, pattern, desc, expected_min=1):
+def check_regex(html, pattern, desc, expected_min=1):
     matches = re.findall(pattern, html)
     count = len(matches)
     status = "PASS" if count >= expected_min else "FAIL"
     print(f"  [{status}] Regex '{desc}': found {count} (expected >= {expected_min})")
     return count >= expected_min
-
-
-test_regex.__test__ = False
 
 
 def run_tests():
@@ -156,17 +150,17 @@ def run_tests():
 
     # Code block structure
     print("\n[Code block]")
-    total += 1; passed += test_css(CODE_BLOCK_HTML, "div.md-code-block", 1)
-    total += 1; passed += test_css(CODE_BLOCK_HTML, "div.md-code-block-banner-wrap", 1)
-    total += 1; passed += test_css(CODE_BLOCK_HTML, "div.md-code-block-dark", 1)
-    total += 1; passed += test_css(CODE_BLOCK_HTML, "span.code-info-button-text", 2)
-    total += 1; passed += test_css(CODE_BLOCK_HTML, "span.d813de27", 1)
+    total += 1; passed += check_css(CODE_BLOCK_HTML, "div.md-code-block", 1)
+    total += 1; passed += check_css(CODE_BLOCK_HTML, "div.md-code-block-banner-wrap", 1)
+    total += 1; passed += check_css(CODE_BLOCK_HTML, "div.md-code-block-dark", 1)
+    total += 1; passed += check_css(CODE_BLOCK_HTML, "span.code-info-button-text", 2)
+    total += 1; passed += check_css(CODE_BLOCK_HTML, "span.d813de27", 1)
 
     # Copy button specific
     print("\n[Copy button in code block]")
     total += 1
     p = r'<span[^>]*class="code-info-button-text"[^>]*>Copy</span>'
-    passed += test_regex(CODE_BLOCK_HTML, p, "Copy button text with 'Copy'", 1)
+    passed += check_regex(CODE_BLOCK_HTML, p, "Copy button text with 'Copy'", 1)
 
     # Code from <pre>
     print("\n[Code from <pre>]")
@@ -182,11 +176,11 @@ def run_tests():
 
     # Attach button
     print("\n[Attach button]")
-    total += 1; passed += test_css(ATTACH_BUTTON_HTML, "div.ds-button--iconLabelPrimary", 1)
-    total += 1; passed += test_css(ATTACH_BUTTON_HTML, "div[role='button']", 1)
+    total += 1; passed += check_css(ATTACH_BUTTON_HTML, "div.ds-button--iconLabelPrimary", 1)
+    total += 1; passed += check_css(ATTACH_BUTTON_HTML, "div[role='button']", 1)
     total += 1
     svg_p = r'<path[^>]*d="M5\.5498\s*9\.75[^"]*"'
-    passed += test_regex(ATTACH_BUTTON_HTML, svg_p, "SVG path starting with M5.5498 9.75", 1)
+    passed += check_regex(ATTACH_BUTTON_HTML, svg_p, "SVG path starting with M5.5498 9.75", 1)
 
     # Legacy markdown extraction
     print("\n[RegexExtractor markdown parsing]")
@@ -209,7 +203,7 @@ def run_tests():
     # Input textarea
     print("\n[Input textarea]")
     input_html = '<textarea class="_27c9245" placeholder="Ask anything..."></textarea>'
-    total += 1; passed += test_css(input_html, "textarea._27c9245", 1)
+    total += 1; passed += check_css(input_html, "textarea._27c9245", 1)
 
     print("\n" + "=" * 55)
     print(f"RESULT: {passed}/{total} tests passed")

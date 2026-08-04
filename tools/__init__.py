@@ -9,7 +9,9 @@ from tools.search import glob_search, grep_search
 from tools.list_dir import list_dir
 from tools.execute import check_code_safety, execute_code
 from tools.safety import is_safe_path, safe_join
-from tools.merge_docs import merge_documents
+from tools.merge_docs import merge_documents, merge_documents_multi
+from tools.send_to_cloud import send_to_cloud
+from tools.list_models import list_models
 # новые инструменты: регистрируются сами через @register при импорте модулей
 from tools.edit_file import edit_file
 from tools.append_file import append_file
@@ -38,6 +40,9 @@ __all__ = [
     "edit_file",
     "append_file",
     "delete_file",
+    "merge_documents_multi",
+    "send_to_cloud",
+    "list_models",
     # реестр
     "register",
     "get_tool",

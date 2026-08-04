@@ -4,8 +4,40 @@ from detection.selectors import SELECTORS
 
 USER_NAME = os.getlogin()
 DEEPSEEK_URL = "https://chat.deepseek.com"
+QWEN_URL = "https://chat.qwen.ai"
 DEBUG_PORT = 9222
 EDGE_USER_DATA_DIR = os.path.expandvars(r"%LOCALAPPDATA%\EdgeDebugProfile")
+
+# === Провайдеры облачных чатов ===
+PROVIDERS = {
+    "deepseek": {
+        "name": "DeepSeek",
+        "label": "DeepSeek Chat",
+        "url": DEEPSEEK_URL,
+        "login_url": "https://chat.deepseek.com/sign_in",
+        "chat_url": "https://chat.deepseek.com/a/chat",
+    },
+    "qwen": {
+        "name": "Qwen",
+        "label": "Qwen Chat",
+        "url": QWEN_URL,
+        "login_url": "https://chat.qwen.ai/",
+        "chat_url": "https://chat.qwen.ai/",
+    },
+}
+
+# === Список моделей Qwen (облачный чат) ===
+QWEN_MODELS = [
+    "Qwen3.8-Max-Preview",
+    "Qwen3-Max",
+    "Qwen-Max",
+    "Qwen-Max-Latest",
+    "Qwen-Plus-Latest",
+    "Qwen-Turbo",
+    "Qwen3-Turbo",
+]
+DEFAULT_MODEL = "Qwen3.8-Max-Preview"
+DEFAULT_QWEN_MODEL = DEFAULT_MODEL
 
 LOG_TO_HTML = False
 LOG_TO_FILE = True
@@ -111,6 +143,21 @@ SCENARIO_CONFIGS = {
         "output_file": "merged_context.txt",
         "description": "Сведение файлов проекта в один TXT для внешнего ИИ"
     },
+    "improve": {
+        "prompt_analyze_file": "prompts/improve_analyze.txt",
+        "prompt_review_file": "prompts/improve_review.txt",
+        "provider": "qwen",
+        "model": DEFAULT_QWEN_MODEL,
+        "max_iterations": 0,
+        "improvement_threshold": 1,
+        "collect_mode": "merge",
+        "merge_extensions": [".cs", ".py", ".xaml", ".csproj", ".sln", ".json", ".xml", ".config"],
+        "output_dir": "pipeline_output",
+        "timeout_script": 60,
+        "timeout_deepseek": 240,
+        "delay_between_questions": 3,
+        "description": "Непрерывный цикл улучшения кода: анализ → улучшение → проверка → переоценка (до отмены)"
+    },
 }
 
 
@@ -124,6 +171,8 @@ def parse_args():
   python main.py --scenario text --input questions.txt --output answers.md
   python main.py --scenario code --max-iterations 5
   python main.py --scenario merge --merge-dir . --ext .cs .py
+  python main.py --scenario merge --merge-dirs . D:/Other/Proj --ext .cs
+  python main.py --scenario improve --provider qwen --model Qwen3.8-Max-Preview
   python tools/merge_docs.py . --ext .cs --output project_context.txt
         """,
     )
@@ -198,10 +247,28 @@ def parse_args():
         help="Директория для сведения документов (сценарий merge)"
     )
     parser.add_argument(
+        "--merge-dirs",
+        nargs="+",
+        default=None,
+        help="Несколько корневых директорий для сведения в один файл (merge, merge_docs --dirs)"
+    )
+    parser.add_argument(
         "--ext",
         nargs="+",
         default=None,
         help="Расширения файлов для merge (по умолчанию: .cs .py .xaml и др.)"
+    )
+    parser.add_argument(
+        "--provider",
+        choices=list(PROVIDERS.keys()),
+        default=None,
+        help=f"Провайдер облачного чата (по умолчанию: deepseek). Доступны: {', '.join(PROVIDERS.keys())}"
+    )
+    parser.add_argument(
+        "--model",
+        choices=QWEN_MODELS,
+        default=None,
+        help=f"Модель провайдера. Для qwen доступны: {', '.join(QWEN_MODELS)} (по умолчанию: {DEFAULT_QWEN_MODEL})"
     )
     return parser.parse_args()
 
@@ -237,11 +304,28 @@ def build_config(cli_args=None):
     cfg["paste_clipboard"] = args.paste_clipboard
     cfg["create_new_chat"] = cfg.get("create_new_chat", False) or args.new_chat
     cfg["debug_port"] = args.debug_port
-    cfg["email"] = args.email or os.environ.get("DEEPSEEK_EMAIL", "")
-    cfg["password"] = args.password or os.environ.get("DEEPSEEK_PASSWORD", "")
+    # Провайдер/модель: явный CLI/окружение имеют приоритет,
+    # иначе берётся дефолт сценария (improve → qwen), иначе deepseek.
+    cfg["provider"] = args.provider or os.environ.get("PROVIDER") or cfg.get("provider", "deepseek")
+    cfg["model"] = args.model or os.environ.get("MODEL") or cfg.get("model", DEFAULT_MODEL)
+    if cfg["provider"] not in PROVIDERS:
+        print(f"Ошибка: неизвестный провайдер '{cfg['provider']}'")
+        print(f"Доступны: {', '.join(PROVIDERS.keys())}")
+        raise SystemExit(1)
+
+    # Email/пароль: deepseek ↔ qwen (с фолбэком на DEEPSEEK_*)
+    default_email_env = "DEEPSEEK_EMAIL"
+    default_password_env = "DEEPSEEK_PASSWORD"
+    if cfg["provider"] == "qwen":
+        default_email_env = "QWEN_EMAIL"
+        default_password_env = "QWEN_PASSWORD"
+    cfg["email"] = args.email or os.environ.get(default_email_env, os.environ.get("DEEPSEEK_EMAIL", ""))
+    cfg["password"] = args.password or os.environ.get(default_password_env, os.environ.get("DEEPSEEK_PASSWORD", ""))
 
     if scenario_name == "merge":
         cfg["merge_dir"] = args.merge_dir
+        if args.merge_dirs:
+            cfg["merge_dirs"] = args.merge_dirs
         if args.ext:
             cfg["extensions"] = args.ext
 

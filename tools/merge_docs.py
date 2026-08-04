@@ -6,9 +6,11 @@ merge_docs.py – инструмент сведения документов д�
 
 Использование:
     python tools/merge_docs.py <директория> [опции]
+    python tools/merge_docs.py --dirs <дир1> <дир2> ... [опции]
 
 Примеры:
     python tools/merge_docs.py . --ext .cs .py --output project_context.txt
+    python tools/merge_docs.py --dirs C:\\ProjA C:\\ProjB --ext .cs --output combined.txt
     python tools/merge_docs.py . --pattern "*.cs" --max-size 50000
     python tools/merge_docs.py . --config merge_config.json
 """
@@ -79,15 +81,28 @@ def collect_files(
     return files
 
 
-def format_file_block(filepath: Path, root: Path, encoding: str = "utf-8") -> str:
-    """Форматирует один файл как блок в выходном TXT."""
+def format_file_block(
+    filepath: Path,
+    root: Path,
+    encoding: str = "utf-8",
+    label: str = None,
+) -> str:
+    """Форматирует один файл как блок в выходном TXT.
+
+    label: префикс корня (для сведения нескольких директорий) —
+           заголовок станет "FILE: <label>/<rel_path>".
+    """
     rel_path = filepath.relative_to(root)
+    if label:
+        rel_display = f"{label}/{rel_path}"
+    else:
+        rel_display = str(rel_path)
     try:
         content = filepath.read_text(encoding=encoding, errors="replace")
     except Exception as e:
         return (
             f"{'=' * 72}\n"
-            f"FILE: {rel_path}\n"
+            f"FILE: {rel_display}\n"
             f"SIZE: {filepath.stat().st_size} bytes\n"
             f"ERROR: {e}\n"
             f"{'=' * 72}\n"
@@ -99,7 +114,7 @@ def format_file_block(filepath: Path, root: Path, encoding: str = "utf-8") -> st
     separator = "=" * 72
     header = (
         f"{separator}\n"
-        f"FILE: {rel_path}\n"
+        f"FILE: {rel_display}\n"
         f"LINES: {line_count}\n"
         f"SIZE: {filepath.stat().st_size} bytes\n"
         f"{separator}\n"
@@ -119,15 +134,31 @@ def merge_documents(
     add_summary: bool = True,
     prompt: str = None,
     prompt_file: str = None,
+    root_dirs: Optional[List[str]] = None,
 ) -> str:
-    """Основная функция: собирает файлы и записывает в один TXT."""
-    root = Path(root_dir).resolve()
-    files = collect_files(
-        root, extensions, exclude_dirs,
-        include_patterns, exclude_patterns, max_file_size,
-    )
+    """Основная функция: собирает файлы и записывает в один TXT.
 
-    if not files:
+    root_dirs: список нескольких корневых директорий — их файлы
+               сливаются в ОДИН выходной файл, каждый блок помечается
+               заголовком "FILE: <root_label>/<rel_path>".
+               Если root_dirs задан, параметр root_dir игнорируется.
+    """
+    if root_dirs:
+        roots = [Path(rd).resolve() for rd in root_dirs]
+    else:
+        roots = [Path(root_dir).resolve()]
+
+    # (root, label, filepath) — label отличает файлы разных директорий
+    collected = []
+    for root in roots:
+        files = collect_files(
+            root, extensions, exclude_dirs,
+            include_patterns, exclude_patterns, max_file_size,
+        )
+        for f in files:
+            collected.append((root, root.name, f))
+
+    if not collected:
         return "Файлы не найдены по указанным критериям."
 
     parts = []
@@ -135,7 +166,7 @@ def merge_documents(
     if add_summary:
         ext_stats = {}
         total_lines = 0
-        for f in files:
+        for _, _, f in collected:
             ext = f.suffix.lower()
             try:
                 content = f.read_text(encoding=encoding, errors="replace")
@@ -145,20 +176,23 @@ def merge_documents(
             ext_stats[ext] = ext_stats.get(ext, 0) + 1
             total_lines += lines
 
+        roots_line = "; ".join(str(r) for r in roots)
         summary = (
             f"{'#' * 72}\n"
             f"# MERGED PROJECT CONTEXT\n"
             f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            f"# Project root: {root}\n"
-            f"# Total files: {len(files)}\n"
+            f"# Project roots: {roots_line}\n"
+            f"# Total files: {len(collected)}\n"
             f"# Total lines: {total_lines}\n"
             f"# Extensions: {ext_stats}\n"
             f"{'#' * 72}\n\n"
         )
         parts.append(summary)
 
-    for filepath in files:
-        parts.append(format_file_block(filepath, root, encoding))
+    for root, label, filepath in collected:
+        # label применяется только в multi-dir режиме (root_dirs задан),
+        # чтобы одиночный режим оставался обратно совместимым: "FILE: a.py"
+        parts.append(format_file_block(filepath, root, encoding, label=label if root_dirs else None))
 
     prompt_text = None
     if prompt_file:
@@ -181,7 +215,104 @@ def merge_documents(
     output_path.write_text("".join(parts), encoding=encoding)
 
     return (
-        f"Готово: {len(files)} файлов → {output_file}\n"
+        f"Готово: {len(collected)} файлов → {output_file}\n"
+        f"Размер: {output_path.stat().st_size:,} байт"
+    )
+
+
+def merge_documents_multi(
+    root_dirs: List[str],
+    output_file: str = "merged_context.txt",
+    extensions: Optional[List[str]] = None,
+    exclude_dirs: Optional[Set[str]] = None,
+    include_patterns: Optional[List[str]] = None,
+    exclude_patterns: Optional[List[str]] = None,
+    max_file_size: int = MAX_FILE_SIZE_DEFAULT,
+    encoding: str = "utf-8",
+    add_summary: bool = True,
+    prompt: str = None,
+    prompt_file: str = None,
+) -> str:
+    """Объединяет файлы из НЕСКОЛЬКИХ корневых директорий в один TXT.
+
+    Для каждой директории вызывается collect_files(); файлы каждой
+    директории помечаются заголовком "DIR: <абс. путь>", а внутри —
+    привычными блоками format_file_block (FILE: <отн. путь>).
+    Параметры полностью совместимы с merge_documents().
+    """
+    resolved = [Path(d).resolve() for d in root_dirs if d]
+    if not resolved:
+        return "Не указаны директории."
+
+    collected = []  # (root: Path, files: List[Path])
+    for root in resolved:
+        files = collect_files(
+            root, extensions, exclude_dirs,
+            include_patterns, exclude_patterns, max_file_size,
+        )
+        if files:
+            collected.append((root, files))
+
+    total_files = sum(len(files) for _, files in collected)
+    if total_files == 0:
+        return "Файлы не найдены по указанным критериям."
+
+    parts = []
+
+    if add_summary:
+        ext_stats = {}
+        total_lines = 0
+        for root, files in collected:
+            for f in files:
+                ext = f.suffix.lower()
+                try:
+                    content = f.read_text(encoding=encoding, errors="replace")
+                    lines = len(content.splitlines())
+                except Exception:
+                    lines = 0
+                ext_stats[ext] = ext_stats.get(ext, 0) + 1
+                total_lines += lines
+
+        roots_summary = "; ".join(str(r) for r, _ in collected)
+        summary = (
+            f"{'#' * 72}\n"
+            f"# MERGED PROJECT CONTEXT (MULTI-DIR)\n"
+            f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"# Project roots: {roots_summary}\n"
+            f"# Total files: {total_files}\n"
+            f"# Total lines: {total_lines}\n"
+            f"# Extensions: {ext_stats}\n"
+            f"{'#' * 72}\n\n"
+        )
+        parts.append(summary)
+
+    for root, files in collected:
+        parts.append(f"\n{'#' * 72}\n# DIR: {root}\n{'#' * 72}\n\n")
+        for filepath in files:
+            parts.append(format_file_block(filepath, root, encoding))
+
+    prompt_text = None
+    if prompt_file:
+        pf = Path(prompt_file)
+        if pf.exists():
+            prompt_text = pf.read_text(encoding=encoding, errors="replace")
+    if prompt and not prompt_text:
+        prompt_text = prompt
+
+    if prompt_text:
+        parts.append(
+            f"\n{'#' * 72}\n"
+            f"# INSTRUCTION FOR AI\n"
+            f"{'#' * 72}\n\n"
+            f"{prompt_text}\n"
+        )
+
+    output_path = Path(output_file)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text("".join(parts), encoding=encoding)
+
+    return (
+        f"Готово: {total_files} файлов → {output_file}\n"
         f"Размер: {output_path.stat().st_size:,} байт"
     )
 
@@ -209,7 +340,12 @@ def main():
   python tools/merge_docs.py . --include "*.Command.cs" --exclude "*Tests*"
         """,
     )
-    parser.add_argument("directory", help="Корневая директория проекта")
+    parser.add_argument("directory", nargs="?", default=None,
+                        help="Корневая директория проекта (или используйте --dirs для нескольких)")
+    parser.add_argument(
+        "--dirs", nargs="+", default=None,
+        help="Несколько корневых директорий — файлы сливаются в один TXT с пометкой директории",
+    )
     parser.add_argument(
         "--ext", nargs="+", default=None,
         help=f"Расширения файлов (по умолчанию: {DEFAULT_EXTENSIONS})",
@@ -256,6 +392,13 @@ def main():
 
     args = parser.parse_args()
 
+    if args.dirs:
+        root_dirs = args.dirs
+    elif args.directory:
+        root_dirs = None
+    else:
+        parser.error("укажите директорию (позиционный аргумент) или --dirs")
+
     if args.config:
         cfg = load_config(args.config)
         extensions = cfg.get("extensions", args.ext)
@@ -277,7 +420,7 @@ def main():
         add_summary = not args.no_summary
 
     result = merge_documents(
-        root_dir=args.directory,
+        root_dir=args.directory if args.directory else (args.dirs[0] if args.dirs else "."),
         output_file=output_file,
         extensions=extensions,
         exclude_dirs=exclude_dirs,
@@ -288,6 +431,7 @@ def main():
         add_summary=add_summary,
         prompt=args.prompt,
         prompt_file=args.prompt_file,
+        root_dirs=root_dirs,
     )
     print(result)
 

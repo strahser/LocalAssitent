@@ -10,8 +10,41 @@ except Exception:
 
 import config
 from agent.deepseek_client import DeepSeekClient
+from agent.QwenClient import QwenClient
 from logger import Logger
 from scenarios import ScenarioFactory
+
+# Загружаем .env (QWEN_EMAIL/QWEN_PASSWORD и др.), если он есть
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+except Exception:
+    pass
+
+
+def build_client(logger, scenario_cfg):
+    """Фабрика клиентов по провайдеру (--provider: deepseek | qwen)."""
+    provider = scenario_cfg.get("provider", "deepseek")
+    timeout = scenario_cfg.get("timeout_deepseek", 180)
+    email = scenario_cfg.get("email", "")
+    password = scenario_cfg.get("password", "")
+
+    if provider == "qwen":
+        model = scenario_cfg.get("model", config.DEFAULT_QWEN_MODEL)
+        return QwenClient(
+            logger,
+            timeout=timeout,
+            email=email,
+            password=password,
+            model=model,
+        )
+
+    return DeepSeekClient(
+        logger,
+        timeout=timeout,
+        email=email,
+        password=password,
+    )
 
 
 def main():
@@ -27,19 +60,17 @@ def main():
 
     logger.log(f"Сценарий: {scenario_name}")
     logger.log(f"Описание: {scenario_cfg.get('description', '')}")
+    provider = scenario_cfg.get("provider", "deepseek")
+    logger.log(f"Провайдер: {provider}")
+    if scenario_cfg.get("model"):
+        logger.log(f"Модель: {scenario_cfg.get('model')}")
 
     scenario = ScenarioFactory.get_scenario(scenario_name, logger)
     scenario.set_config(scenario_cfg)
 
     if scenario_name != "merge":
         logger.log(f"Макс. итераций: {scenario_cfg.get('max_iterations', 1)}")
-        timeout = scenario_cfg.get("timeout_deepseek", 180)
-        client = DeepSeekClient(
-            logger,
-            timeout=timeout,
-            email=scenario_cfg.get("email", ""),
-            password=scenario_cfg.get("password", "")
-        )
+        client = build_client(logger, scenario_cfg)
         scenario.set_client(client)
 
     success = scenario.run()

@@ -8,7 +8,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agent.client import SeleniumDeepSeekClient
-from logger import Logger
+from Logger import Logger
 from config import SELENIUM_CONFIG
 
 

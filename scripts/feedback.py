@@ -1,9 +1,10 @@
 """
-Отправка файлов проекта в DeepSeek для обратной связи.
+Отправка файлов проекта в облачный чат (DeepSeek / Qwen) для обратной связи.
 
 Использование:
-    python scripts/feedback.py                # в текущем чате
-    python scripts/feedback.py --new-chat     # в новом чате
+    python scripts/feedback.py                          # DeepSeek, текущий чат
+    python scripts/feedback.py --new-chat               # новый чат
+    python scripts/feedback.py --provider qwen --model Qwen3.8-Max-Preview
 """
 import argparse
 import os
@@ -13,8 +14,9 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agent.client import SeleniumDeepSeekClient
-from logger import Logger
-from config import SELENIUM_CONFIG
+from agent.QwenClient import QwenClient, build_qwen_config
+from Logger import Logger
+from config import SELENIUM_CONFIG, DEFAULT_QWEN_MODEL
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -66,9 +68,22 @@ def collect_code() -> str:
     return "\n".join(parts)
 
 
-def main(new_chat: bool = False) -> bool:
+def build_client(logger, provider, email, password, model):
+    """Создаёт клиент нужного провайдера."""
+    if provider == "qwen":
+        client = QwenClient(logger, email=email, password=password, model=model)
+        if model:
+            try:
+                client.select_model(model)
+            except Exception as e:
+                logger.log(f"⚠️ Не удалось выбрать модель {model}: {e}", "WARNING")
+        return client
+    return SeleniumDeepSeekClient(logger, SELENIUM_CONFIG)
+
+
+def main(new_chat: bool = False, provider: str = "deepseek", model: str = None) -> bool:
     print("=" * 60)
-    print("  Отправка файлов в DeepSeek")
+    print(f"  Отправка файлов в {provider}" + (f" ({model})" if model else ""))
     print("=" * 60)
 
     logger = Logger(
@@ -87,7 +102,9 @@ def main(new_chat: bool = False) -> bool:
     print(f"  Промпт: {len(prompt)} символов")
 
     print("\n[2/3] Подключение к браузеру...")
-    client = SeleniumDeepSeekClient(logger, SELENIUM_CONFIG)
+    email = os.environ.get(f"{provider.upper()}_EMAIL", os.environ.get("DEEPSEEK_EMAIL", ""))
+    password = os.environ.get(f"{provider.upper()}_PASSWORD", os.environ.get("DEEPSEEK_PASSWORD", ""))
+    client = build_client(logger, provider, email, password, model)
 
     if new_chat:
         print("  Создание нового чата...")
@@ -112,9 +129,10 @@ def main(new_chat: bool = False) -> bool:
     output_dir = os.path.join(PROJECT_ROOT, "pipeline_output")
     os.makedirs(output_dir, exist_ok=True)
 
-    md_path = os.path.join(output_dir, "deepseek_feedback.md")
+    md_name = "qwen_feedback.md" if provider == "qwen" else "deepseek_feedback.md"
+    md_path = os.path.join(output_dir, md_name)
     with open(md_path, "w", encoding="utf-8") as f:
-        f.write("# Обратная связь от DeepSeek\n\n")
+        f.write(f"# Обратная связь от {provider}" + (f" ({model})" if model else "") + "\n\n")
         f.write(f"**Дата:** {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
         f.write(f"**Время ответа:** {elapsed:.1f} сек\n\n")
         f.write("---\n\n")
@@ -131,8 +149,13 @@ def main(new_chat: bool = False) -> bool:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Отправка файлов проекта в DeepSeek")
+    parser = argparse.ArgumentParser(description="Отправка файлов проекта в облачный чат")
     parser.add_argument("--new-chat", action="store_true", help="Создать новый чат")
+    parser.add_argument("--provider", default="deepseek", choices=["deepseek", "qwen"],
+                        help="Провайдер (по умолчанию: deepseek)")
+    parser.add_argument("--model", default=None,
+                        help=f"Модель (для qwen, по умолчанию: {DEFAULT_QWEN_MODEL})")
     args = parser.parse_args()
-    success = main(new_chat=args.new_chat)
+    model = args.model or (DEFAULT_QWEN_MODEL if args.provider == "qwen" else None)
+    success = main(new_chat=args.new_chat, provider=args.provider, model=model)
     sys.exit(0 if success else 1)

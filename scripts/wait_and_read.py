@@ -16,7 +16,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from agent.clipboard import ClipboardManager
 from detection.element_finder import ElementFinder
 from config import SELENIUM_CONFIG
-from logger import Logger
+from Logger import Logger
 
 
 def wait_and_read():
