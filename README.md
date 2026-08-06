@@ -73,6 +73,10 @@ LocalAssitent/
 │   ├── apply_cloud.py       # Применение ответа облачного ИИ (docs/AI_TASK_*.md)
 │   └── test_send.py
 │
+├── .opencode/               # Контекст и скиллы агента
+│   ├── context.md / status.md / todo.md / work-log.md
+│   └── skills/heatloss-browser-bridge/SKILL.md  # Браузерный мост Qwen (переиспользуемый)
+│
 ├── tests/                   # Тесты (python -m pytest tests -q)
 ├── docs/                    # Документация + архивы AI_TASK (спеки и ответы ИИ)
 └── prompts/                 # Промпты для ИИ
@@ -428,6 +432,10 @@ markdown (`## Ответ N`). Утилитарный скрипт `qwen/client.p
 | `qwen_send_prompt.py` | Отправка промпта в текущую вкладку chat.qwen.ai: убирает блокирующий оверлей `.page-loading` (z=49), вставка nativeSetter, отправка, проверка очистки поля | `python scripts\qwen_send_prompt.py --file <файл задания>` (формат конвейера: строка 1 — путь ответа, строки 4+ — промпт) |
 | `qwen_wait_answer.py` | Ожидание стабилизации ответа (2 замера), распознавание «Сетевая ошибка» (код 3 → ретрай), опционально маркер конца | `python scripts\qwen_wait_answer.py --timeout 600 --marker КОНЕЦ_ТЗ` |
 | `qwen_read_all_answers.py` | Копирование ВСЕХ ответов через кнопки «Копировать» в один markdown | `python scripts\qwen_read_all_answers.py` |
+
+**Скилл браузерного моста** (`heatloss-browser-bridge`) — в `.opencode\skills\heatloss-browser-bridge\SKILL.md`:
+роль «передача текста между проектом и Qwen», поток работы, обработка «Сетевой ошибки» (ретраи),
+блокирующий оверлей. Копируется на новые проекты (в HeatLossRevit2 это Агент-3 конвейера).
 
 **Блокирующий оверлей `.page-loading`** (найдено 2026-08-06): после загрузки страницы он
 висит над полем ввода (z-index 49, pointer-events: auto) и ломает React-ввод — текст вставляется,
