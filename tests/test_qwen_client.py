@@ -225,6 +225,38 @@ class TestQwenClient:
         assert "RESULT" in content
         assert "# Ответ Qwen" in content
 
+    def test_normalize_answer_text_crlf(self):
+        """CRLF и одиночные \r нормализуются в \n; дубли пустых строк убираются."""
+        raw = "Первая строка\r\nВторая\r\r\n\r\nТретья"
+        got = QwenClient.normalize_answer_text(raw)
+        assert "\r" not in got
+        assert "\n\n\n" not in got
+        assert got == "Первая строка\nВторая\n\nТретья"
+
+    def test_normalize_answer_text_empty(self):
+        assert QwenClient.normalize_answer_text("") == ""
+        assert QwenClient.normalize_answer_text(None) == ""
+
+    def test_save_all_answers_writes_md(self):
+        driver = FakeDriver()
+        client, _ = self._make_client(driver)
+        client.connect()
+        tmpdir = tempfile.mkdtemp()
+        out = os.path.join(tmpdir, "all.md")
+        answers = [
+            {"index": 1, "text": "Ответ один", "error": None},
+            {"index": 2, "text": "Ответ два\r\nстрокой", "error": "copy button not found"},
+        ]
+        path = client.save_all_answers(answers, out, chat_id="abc-123")
+        assert os.path.exists(path)
+        content = open(path, encoding="utf-8").read()
+        assert "abc-123" in content
+        assert "## Ответ 1" in content
+        assert "Ответ один" in content
+        assert "## Ответ 2" in content
+        assert "Ответ два" in content
+        assert "copy button not found" in content
+
     def test_run_task_full_flow(self):
         driver = FakeDriver()
         client, _ = self._make_client(driver)

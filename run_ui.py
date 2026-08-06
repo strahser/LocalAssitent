@@ -2,8 +2,8 @@
 run_ui.py — запуск веб-интерфейса LocalAssitent (FastAPI + статика).
 
 Открывает порт и браузер с UI:
-    py run_ui.py                 # http://127.0.0.1:8000/ (браузер откроется сам)
-    py run_ui.py --port 8080     # другой порт
+    py run_ui.py                 # http://127.0.0.1:8080/ (браузер откроется сам)
+    py run_ui.py --port 8000     # другой порт
     py run_ui.py --no-browser    # не открывать браузер
 """
 import argparse
@@ -16,7 +16,7 @@ import uvicorn
 def main():
     ap = argparse.ArgumentParser(description="LocalAssitent Web UI (FastAPI)")
     ap.add_argument("--host", default="127.0.0.1", help="Хост (по умолчанию 127.0.0.1)")
-    ap.add_argument("--port", type=int, default=8000, help="Порт (по умолчанию 8000)")
+    ap.add_argument("--port", type=int, default=8080, help="Порт (по умолчанию 8080)")
     ap.add_argument("--no-browser", action="store_true", help="Не открывать браузер автоматически")
     args = ap.parse_args()
 

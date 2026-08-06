@@ -20,11 +20,23 @@ QWEN_SELECTORS = {
     ],
 
     # === Кнопка копирования ответа ===
+    # Наблюдаемый DOM (2026-08-06): кнопка div[role='button'][aria-label='Копировать']
+    # в .response-message-footer, который СКРЫТ классом 'response-message-footer-none'
+    # до наведения мыши на сообщение. См. README «Известные проблемы Qwen UI».
     "copy_answer_button": [
+        "div[role='button'][aria-label='Копировать']",
+        "div[role='button'][aria-label='Copy']",
+        "button.copy-response-button",
         "button[aria-label*='copy' i]",
         "[data-testid*='copy' i]",
         "div[role='button'][aria-label*='copy' i]",
         "button[class*='copy' i]",
+    ],
+
+    # === Футер сообщения (панель действий: копировать/голосовать и т.п.) ===
+    "response_footer": [
+        "div.response-message-footer",
+        "div[class*='message-footer']",
     ],
 
     # === Индикатор «думает» / загрузка ===

@@ -15,3 +15,7 @@ context.txt
 project_context.txt
 merged_output.txt
 *.log
+data/
+*.db
+data/
+*.db

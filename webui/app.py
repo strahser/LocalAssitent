@@ -6,6 +6,8 @@ webui/app.py — FastAPI-бэкенд веб-интерфейса LocalAssitent.
   - выбор клиента: DeepSeek / Qwen (+ модель Qwen);
   - пайплайны: qa (вопрос—ответ), code (вопрос—код), merge (проект→контекст→облако),
     improve (один проход анализа проекта);
+  - настройка промптов пайплайнов: SQLite (data/localassistant.db) + CRUD
+    /api/prompts, /api/prompt-config; префилл кредов /api/credentials;
   - журнал ui.log через /api/logs.
 
 Запуск (из корня проекта):
@@ -28,7 +30,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from logger import Logger
-from config import PROVIDERS, QWEN_MODELS, DEFAULT_MODEL, SCENARIO_CONFIGS
+from config import PROVIDERS, QWEN_MODELS, DEFAULT_MODEL
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -55,6 +57,10 @@ class ClientSession:
 
 
 session = ClientSession()
+
+# Счётчик сообщений текущей сессии: 0 = следующее сообщение первое.
+# Используется для выбора промпта first/subsequent (см. webui.prompts_db).
+session_message_count = 0
 
 
 def get_logger() -> Logger:
@@ -121,11 +127,17 @@ def disconnect_client() -> dict:
 
 
 def send_message(message: str, new_chat: bool = False) -> dict:
-    """Отправляет промпт текущему клиенту (под session.lock)."""
+    """Отправляет промпт текущему клиенту (под session.lock).
+
+    new_chat=True сбрасывает счётчик сообщений сессии — следующее сообщение
+    будет считаться первым (используется промпт stage='first').
+    """
+    global session_message_count
     if session.client is None:
         raise RuntimeError("Не подключено к браузеру. Нажмите «Подключиться к браузеру».")
     lg = get_logger()
     if new_chat:
+        session_message_count = 0
         try:
             session.client.new_chat()
         except Exception as e:
@@ -135,6 +147,7 @@ def send_message(message: str, new_chat: bool = False) -> dict:
     if result is None:
         raise RuntimeError("Ответ от облачного чата не получен (возможно, обрыв соединения).")
     full_text, code_text = result
+    session_message_count += 1
     lg.log(f"✅ Ответ получен: {len(full_text or '')} символов")
     return {"response": full_text or "", "code": code_text}
 
@@ -163,12 +176,24 @@ PIPELINES = {
 }
 
 
-def _pipeline_message(pipeline: str, message: str) -> str:
+def _pipeline_message(pipeline: str, message: str, stage: str = "both") -> str:
+    """Собирает промпт для пайплайна из БД (webui.prompts_db).
+
+    stage: 'first' | 'subsequent' | 'both'. Промпты живут в SQLite
+    (сидинг из SCENARIO_CONFIGS / prompts/*.txt / merge), здесь только
+    обёртка-формат. Если промпта нет в БД — используем простое сообщение.
+    """
+    tpl = None
+    try:
+        from webui.prompts_db import get_prompt_for
+        tpl = get_prompt_for(pipeline, stage) or get_prompt_for(pipeline, "both")
+    except Exception:
+        tpl = None
+    if not tpl:
+        tpl = "Ответь на вопрос."
     if pipeline == "qa":
-        tpl = SCENARIO_CONFIGS["text"]["prompt_template"]
         return f"{tpl}\n\n**Вопрос:** {message}"
     if pipeline == "code":
-        tpl = SCENARIO_CONFIGS["code"]["prompt_template"]
         return f"{tpl}\n\n## Задача\n{message}\n\nКогда задача решена полностью — напиши в конце: TASK_COMPLETE: <описание>"
     return message
 
@@ -243,9 +268,16 @@ def collect_to_file(directories, project_type: str = "auto",
 def run_pipeline(pipeline: str, message: str,
                  directory: Optional[str] = None, new_chat: bool = False) -> dict:
     """Выполняет выбранный пайплайн (под session.lock)."""
+    global session_message_count
+    if new_chat:
+        # новый чат = новая сессия: первое сообщение получает промпт stage='first'
+        session_message_count = 0
+    stage = "first" if session_message_count == 0 else "subsequent"
+
     if pipeline == "merge":
         content, out = _collect_context_to(directory or "", "ui_merged_context.txt")
-        prompt = (
+        from webui.prompts_db import get_prompt_for
+        prompt = get_prompt_for("merge", stage) or get_prompt_for("merge", "both") or (
             "Проанализируй приведённый ниже код проекта и дай структурированные рекомендации "
             "(архитектура, ошибки, безопасность, производительность, тестируемость). "
             "Соблюдай формат ответа из инструкции в начале контекста."
@@ -256,15 +288,15 @@ def run_pipeline(pipeline: str, message: str,
 
     if pipeline == "improve":
         content, out = _collect_context_to(directory or "", "ui_improve_context.txt")
-        pf = PROJECT_ROOT / "prompts" / "improve_analyze.txt"
-        prompt = pf.read_text(encoding="utf-8") if pf.exists() else (
+        from webui.prompts_db import get_prompt_for
+        prompt = get_prompt_for("improve", stage) or get_prompt_for("improve", "both") or (
             "Проанализируй код проекта и предложи улучшения."
         )
         result = send_message(f"{prompt}\n\n{content}", new_chat=new_chat)
         result["note"] = f"Контекст: {out} ({len(content)} символов). Один проход анализа, без авто-применения."
         return result
 
-    prompt = _pipeline_message(pipeline, message)
+    prompt = _pipeline_message(pipeline, message, stage=stage)
     return send_message(prompt, new_chat=new_chat)
 
 
@@ -287,6 +319,7 @@ def api_health():
         "connected": session.client is not None,
         "provider": session.provider,
         "model": session.model,
+        "session_messages": session_message_count,
         "pipelines": [{"id": pid, "label": p["label"], "description": p["description"]}
                       for pid, p in PIPELINES.items()],
     })
@@ -302,6 +335,117 @@ def api_providers():
         "qwen_models": QWEN_MODELS,
         "default_model": DEFAULT_MODEL,
     })
+
+
+@app.get("/api/credentials")
+def api_credentials():
+    """Возвращает email и признак наличия пароля из .env (без самих паролей).
+
+    Используется фронтом для префилла формы логина: если поля пустые,
+    бэкенд всё равно возьмёт креды из окружения.
+    """
+    return _ok({
+        "deepseek": {
+            "email": os.environ.get("DEEPSEEK_EMAIL", ""),
+            "has_password": bool(os.environ.get("DEEPSEEK_PASSWORD")),
+        },
+        "qwen": {
+            "email": os.environ.get("QWEN_EMAIL", ""),
+            "has_password": bool(os.environ.get("QWEN_PASSWORD")),
+        },
+    })
+
+
+# ---------------------------------------------------------------------------
+# Промпты (SQLite CRUD, см. webui/prompts_db.py)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/prompts")
+def api_prompts_list():
+    try:
+        from webui.prompts_db import ensure_initialized, get_all_prompts
+        ensure_initialized()
+        return _ok({"prompts": get_all_prompts()})
+    except Exception as e:
+        return _fail(f"Ошибка чтения промптов: {e}", status=500)
+
+
+@app.post("/api/prompts")
+def api_prompts_create(payload: dict):
+    payload = payload or {}
+    try:
+        from webui.prompts_db import ensure_initialized, create_prompt
+        ensure_initialized()
+        prompt = create_prompt(
+            pipeline=payload.get("pipeline", ""),
+            stage=payload.get("stage", "both"),
+            name=payload.get("name", ""),
+            content=payload.get("content", ""),
+            is_active=int(payload.get("is_active", 1)),
+        )
+        return _ok({"prompt": prompt})
+    except ValueError as e:
+        return _fail(str(e))
+    except Exception as e:
+        return _fail(f"Ошибка создания промпта: {e}", status=500)
+
+
+@app.put("/api/prompts/{prompt_id}")
+def api_prompts_update(prompt_id: int, payload: dict):
+    payload = payload or {}
+    try:
+        from webui.prompts_db import update_prompt
+        prompt = update_prompt(
+            prompt_id,
+            name=payload.get("name"),
+            content=payload.get("content"),
+            is_active=payload.get("is_active"),
+            stage=payload.get("stage"),
+        )
+        if prompt is None:
+            return _fail(f"Промпт {prompt_id} не найден", status=404)
+        return _ok({"prompt": prompt})
+    except Exception as e:
+        return _fail(f"Ошибка обновления промпта: {e}", status=500)
+
+
+@app.delete("/api/prompts/{prompt_id}")
+def api_prompts_delete(prompt_id: int):
+    try:
+        from webui.prompts_db import delete_prompt
+        ok = delete_prompt(prompt_id)
+        if not ok:
+            return _fail(f"Промпт {prompt_id} не найден", status=404)
+        return _ok({"deleted": prompt_id})
+    except Exception as e:
+        return _fail(f"Ошибка удаления промпта: {e}", status=500)
+
+
+@app.get("/api/prompt-config")
+def api_prompt_config_get():
+    try:
+        from webui.prompts_db import ensure_initialized, get_prompt_config
+        ensure_initialized()
+        return _ok({"config": get_prompt_config()})
+    except Exception as e:
+        return _fail(f"Ошибка чтения конфигурации промптов: {e}", status=500)
+
+
+@app.post("/api/prompt-config")
+def api_prompt_config_set(payload: dict):
+    payload = payload or {}
+    pipeline = payload.get("pipeline", "")
+    stage = payload.get("stage", "")
+    prompt_id = payload.get("prompt_id")
+    try:
+        from webui.prompts_db import set_prompt_config
+        config = set_prompt_config(pipeline, stage, prompt_id)
+        return _ok({"config": config})
+    except ValueError as e:
+        return _fail(str(e))
+    except Exception as e:
+        return _fail(f"Ошибка сохранения конфигурации промптов: {e}", status=500)
 
 
 @app.post("/api/connect")

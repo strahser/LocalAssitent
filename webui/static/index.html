@@ -7,112 +7,199 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<!-- Горизонтальный хедер -->
 <header>
-  <h1>🛰️ LocalAssitent — Web UI</h1>
-  <div id="health" class="health">
+  <div class="brand">
+    <span class="logo">🛰️</span>
+    <span class="brand-name">LocalAssitent</span>
+    <span class="brand-sub">Web UI</span>
+  </div>
+  <div class="health">
     <span id="connBadge" class="badge badge-off">Не подключено</span>
     <span id="connInfo">—</span>
   </div>
 </header>
 
-<main>
-  <section class="card">
-    <h2>1. Браузер</h2>
-    <div class="row">
-      <button id="btnConnect" class="btn btn-primary">🔌 Подключиться к браузеру</button>
-      <button id="btnDisconnect" class="btn btn-ghost">⏻ Отключиться</button>
-    </div>
-    <p class="hint">
-      Запускает/подключает Edge в debug-режиме (порт 9222) и входит в облачный чат
-      выбранного клиента (DeepSeek / Qwen). Первый вход может потребовать ручной авторизации.
-    </p>
-  </section>
+<!-- Коннект-бар (горизонтальное меню сверху) -->
+<div class="connectbar">
+  <label>Провайдер:
+    <select id="provider">
+      <option value="deepseek">DeepSeek Chat</option>
+      <option value="qwen">Qwen Chat</option>
+    </select>
+  </label>
+  <label>Модель (Qwen):
+    <select id="model"></select>
+  </label>
+  <label>Email (пусто = из .env):
+    <input id="email" type="text" placeholder="user@mail.com">
+  </label>
+  <label>Пароль (пусто = из .env):
+    <input id="password" type="password" placeholder="••••••••">
+  </label>
+  <button id="btnConnect" class="btn btn-primary">🔌 Подключиться к браузеру</button>
+  <button id="btnDisconnect" class="btn btn-ghost">⏻ Отключиться</button>
+  <button id="btnHelp" class="btn btn-ghost" type="button">❓ Справка</button>
+</div>
 
-  <section class="card">
-    <h2>2. Клиент</h2>
-    <div class="row">
-      <label>Провайдер:
-        <select id="provider">
-          <option value="deepseek">DeepSeek Chat</option>
-          <option value="qwen">Qwen Chat</option>
-        </select>
-      </label>
-      <label>Модель (Qwen):
-        <select id="model"></select>
-      </label>
-    </div>
-    <div class="row">
-      <label>Email (пусто = из .env):
-        <input id="email" type="text" placeholder="user@mail.com">
-      </label>
-      <label>Пароль (пусто = из .env):
-        <input id="password" type="password" placeholder="••••••••">
-      </label>
-    </div>
-  </section>
+<div class="layout">
+  <!-- Вертикальное меню слева -->
+  <nav class="sidenav">
+    <button class="nav-btn active" data-view="chat">💬 Чат</button>
+    <button class="nav-btn" data-view="pipeline">⚙️ Пайплайны</button>
+    <button class="nav-btn" data-view="collect">📄 Сбор файлов</button>
+    <button class="nav-btn" data-view="prompts">🧠 Промпты</button>
+    <button class="nav-btn" data-view="logs">📜 Журнал</button>
+  </nav>
 
-  <section class="card">
-    <h2>3. Пайплайн</h2>
-    <div class="row">
-      <label>Пайплайн:
-        <select id="pipeline">
-          <option value="qa">Чат: вопрос — ответ (Q&A)</option>
-          <option value="code">Чат: вопрос — код</option>
-          <option value="merge">Проект → контекст → облако</option>
-          <option value="improve">Improve: анализ проекта</option>
-        </select>
-      </label>
-      <button id="btnHelp" class="btn btn-ghost" type="button">❓ Справка</button>
-      <label>Директория (для merge/improve):
-        <input id="directory" type="text" placeholder="пусто = проект LocalAssitent">
-      </label>
-      <label class="chk">
-        <input id="newChat" type="checkbox"> Новый чат
-      </label>
-    </div>
-    <textarea id="message" rows="6" placeholder="Вопрос или задача для облачного ИИ..."></textarea>
-    <div class="row">
-      <button id="btnRun" class="btn btn-primary">🚀 Выполнить</button>
-      <button id="btnCopy" class="btn btn-ghost">📋 Копировать ответ</button>
-    </div>
-    <div id="busy" class="busy hidden">⏳ Работаю... облачный чат может отвечать 1–5 минут</div>
-  </section>
+  <main>
+    <!-- ============ ЧАТ ============ -->
+    <section id="view-chat" class="view">
+      <div class="card">
+        <h2>💬 Чат</h2>
+        <div id="chatLog" class="chat-log"></div>
+        <div class="chat-input-row">
+          <label class="chk">
+            <input id="newChatChat" type="checkbox"> Новый чат
+          </label>
+          <textarea id="message" rows="3" placeholder="Вопрос или задача для облачного ИИ..."></textarea>
+        </div>
+        <div class="row">
+          <button id="btnSend" class="btn btn-primary">🚀 Отправить</button>
+          <button id="btnCopy" class="btn btn-ghost">📋 Копировать ответ</button>
+        </div>
+        <div id="busy" class="busy hidden">⏳ Работаю... облачный чат может отвечать 1–5 минут</div>
+        <div id="note" class="note"></div>
+      </div>
+    </section>
 
-  <section class="card">
-    <h2>4. Скопировать данные в один файл</h2>
-    <div class="row">
-      <label>Тип проекта:
-        <select id="collectType">
-          <option value="auto">Авто (определить)</option>
-          <option value="cs">C# (.cs)</option>
-          <option value="py">Python (.py)</option>
-        </select>
-      </label>
-      <label>Имя файла:
-        <input id="collectFilename" type="text" value="cloud_context.txt">
-      </label>
-    </div>
-    <label>Директории (по одной на строку):
-      <textarea id="collectDirs" rows="4"
-        placeholder="d:/Projects/HeatLossRevit2&#10;d:/Projects/my-python-app"></textarea>
-    </label>
-    <div class="row">
-      <button id="btnCollect" class="btn btn-primary">📄 Скопировать в один файл</button>
-    </div>
-    <div id="collectResult" class="collect-result"></div>
-  </section>
+    <!-- ============ ПАЙПЛАЙНЫ ============ -->
+    <section id="view-pipeline" class="view hidden">
+      <div class="card">
+        <h2>⚙️ Пайплайн</h2>
+        <div class="row">
+          <label>Пайплайн:
+            <select id="pipeline">
+              <option value="qa">Чат: вопрос — ответ (Q&A)</option>
+              <option value="code">Чат: вопрос — код</option>
+              <option value="merge">Проект → контекст → облако</option>
+              <option value="improve">Improve: анализ проекта</option>
+            </select>
+          </label>
+          <label>Директория (для merge/improve):
+            <input id="directory" type="text" placeholder="пусто = проект LocalAssitent">
+          </label>
+          <label class="chk">
+            <input id="newChat" type="checkbox"> Новый чат
+          </label>
+        </div>
+        <textarea id="pipelineMessage" rows="6" placeholder="Вопрос или задача для облачного ИИ..."></textarea>
+        <div class="row">
+          <button id="btnRun" class="btn btn-primary">🚀 Выполнить</button>
+          <button id="btnCopyPipeline" class="btn btn-ghost">📋 Копировать ответ</button>
+        </div>
+        <div id="busyPipeline" class="busy hidden">⏳ Работаю... облачный чат может отвечать 1–5 минут</div>
+        <div id="notePipeline" class="note"></div>
+        <div id="output" class="output">—</div>
+      </div>
+    </section>
 
-  <section class="card">
-    <h2>Ответ</h2>
-    <div id="note" class="note"></div>
-    <div id="output" class="output">—</div>
-  </section>
+    <!-- ============ СБОР ФАЙЛОВ ============ -->
+    <section id="view-collect" class="view hidden">
+      <div class="card">
+        <h2>📄 Скопировать данные в один файл</h2>
+        <div class="row">
+          <label>Тип проекта:
+            <select id="collectType">
+              <option value="auto">Авто (определить)</option>
+              <option value="cs">C# (.cs)</option>
+              <option value="py">Python (.py)</option>
+            </select>
+          </label>
+          <label>Имя файла:
+            <input id="collectFilename" type="text" value="cloud_context.txt">
+          </label>
+        </div>
+        <label>Директории (по одной на строку):
+          <textarea id="collectDirs" rows="4"
+            placeholder="d:/Projects/HeatLossRevit2&#10;d:/Projects/my-python-app"></textarea>
+        </label>
+        <div class="row">
+          <button id="btnCollect" class="btn btn-primary">📄 Скопировать в один файл</button>
+        </div>
+        <div id="collectResult" class="collect-result"></div>
+      </div>
+    </section>
 
-  <section class="card">
-    <h2>Журнал (ui.log)</h2>
-    <pre id="logs" class="logs">…</pre>
-  </section>
-</main>
+    <!-- ============ ПРОМПТЫ (CRUD) ============ -->
+    <section id="view-prompts" class="view hidden">
+      <div class="card">
+        <h2>🧠 Промпты пайплайнов (SQLite)</h2>
+        <p class="hint">
+          Управление промптами: какой использовать для <b>первого</b> сообщения сессии
+          (stage = first) и для <b>последующих</b> (stage = subsequent). stage = both —
+          дефолтный промпт для обоих случаев, если в конфигурации ничего не назначено.
+        </p>
+
+        <h3 class="subhead">Конфигурация first / subsequent</h3>
+        <div id="promptConfigBox" class="config-box"></div>
+
+        <h3 class="subhead">Новый промпт</h3>
+        <div class="prompt-form">
+          <div class="row">
+            <label>Пайплайн:
+              <select id="pfPipeline">
+                <option value="qa">Чат Q&A</option>
+                <option value="code">Вопрос — код</option>
+                <option value="merge">Проект → контекст → облако</option>
+                <option value="improve">Improve: анализ</option>
+              </select>
+            </label>
+            <label>Stage:
+              <select id="pfStage">
+                <option value="both">both (по умолчанию)</option>
+                <option value="first">first (первое сообщение)</option>
+                <option value="subsequent">subsequent (последующие)</option>
+              </select>
+            </label>
+            <label>Название:
+              <input id="pfName" type="text" placeholder="напр. default qa">
+            </label>
+          </div>
+          <label>Содержимое промпта:
+            <textarea id="pfContent" rows="5" placeholder="Текст промпта..."></textarea>
+          </label>
+          <div class="row">
+            <button id="btnPromptCreate" class="btn btn-primary">➕ Создать промпт</button>
+            <button id="btnPromptCancel" class="btn btn-ghost hidden">✖ Отмена (редактирование)</button>
+            <input type="hidden" id="pfEditId" value="">
+          </div>
+        </div>
+
+        <h3 class="subhead">Все промпты</h3>
+        <div class="prompt-list">
+          <table class="prompt-table">
+            <thead>
+              <tr>
+                <th>ID</th><th>Пайплайн</th><th>Stage</th><th>Название</th>
+                <th>Активен</th><th>Действия</th>
+              </tr>
+            </thead>
+            <tbody id="promptTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ ЖУРНАЛ ============ -->
+    <section id="view-logs" class="view hidden">
+      <div class="card">
+        <h2>📜 Журнал (ui.log)</h2>
+        <pre id="logs" class="logs">…</pre>
+      </div>
+    </section>
+  </main>
+</div>
 
 <!-- Модальное окно справки по пайплайнам -->
 <div id="helpModal" class="modal hidden">
@@ -132,11 +219,15 @@
       </div>
       <div class="help-item">
         <h4>📦 Проект → контекст → облако</h4>
-        <p>Автоматический сбор всех файлов проекта в единый контекст и отправка в облако. Укажите директорию — ИИ проанализирует весь код. Использует фильтр временных файлов (bin, obj, .git и т.д.).</p>
+        <p>Автоматический сбор всех файлов проекта в единый контекст и отправка в облако. Использует фильтр временных файлов (bin, obj, .git и т.д.).</p>
       </div>
       <div class="help-item">
         <h4>🔍 Improve: анализ проекта</h4>
-        <p>Глубокий анализ кода проекта. ИИ изучит структуру, найдёт проблемы, предложит улучшения. Рекомендуется для code review и оптимизации.</p>
+        <p>Глубокий анализ кода проекта. ИИ изучит структуру, найдёт проблемы, предложит улучшения.</p>
+      </div>
+      <div class="help-item">
+        <h4>🧠 Промпты (SQLite)</h4>
+        <p>CRUD-управление промптами пайплайнов. Первое сообщение сессии использует промпт stage=first, последующие — stage=subsequent. Промпт stage=both — фолбэк, если конфигурация пуста.</p>
       </div>
     </div>
   </div>

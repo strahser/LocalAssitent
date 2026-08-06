@@ -67,6 +67,7 @@ LocalAssitent/
 │   ├── wait_and_read.py
 │   ├── read_response.py
 │   ├── qwen_task.py         # Задача для chat.qwen.ai через Edge CDP
+│   ├── qwen_read_all_answers.py  # Копирование ВСЕХ ответов открытого чата Qwen в MD
 │   ├── apply_cloud.py       # Применение ответа облачного ИИ (docs/AI_TASK_*.md)
 │   └── test_send.py
 │
@@ -371,6 +372,52 @@ python pipeline.py --merged pipeline_output/project_context.txt
 # Свои credentials
 python pipeline.py --email user@mail.com --password pass
 ```
+
+## Известные проблемы Qwen UI (chat.qwen.ai)
+
+**ВАЖНО для агентов и разработчиков:** UI Qwen часто меняется. Наблюдаемый DOM (2026-08-06):
+
+1. **Кнопка «Копировать» скрыта до наведения мыши.**
+   Футер ответа имеет класс `response-message-footer-none` (CSS `display: none`),
+   кнопка появляется только при hover на сообщение.
+   - Реальный элемент: `div[role='button'][aria-label='Копировать']` внутри `div.response-message-footer`.
+   - Голый `button.copy-response-button` — это **не** кликабельный контрол (пустой, скрыт).
+   - Решение: hover по блоку `div.qwen-chat-message-assistant` + снять класс скрытия JS:
+     ```js
+     document.querySelectorAll('div.response-message-footer')
+       .forEach(el => el.classList.remove('response-message-footer-none'));
+     ```
+   Реализовано в `QwenClient._reveal_response_footer()` (qwen/client.py).
+
+2. **Блок ответа ассистента** — `div.qwen-chat-message-assistant`
+   (НЕ `.chat.assistant` и НЕ `article` — такие селекторы находят пустой контейнер).
+   Первым селектором `assistant_messages` в `detection/qwen_selectors.py` должен быть
+   `//div[contains(@class, 'qwen-chat-message-assistant')]`.
+
+3. **Текст из буфера обмена приходит с `\r\n` и дублями пустых строк.**
+   В markdown это превращается в «растянутый» текст с лишними пустыми строками.
+   Всегда прогоняйте текст через `QwenClient.normalize_answer_text()`
+   (CRLF→LF, удаление одиночных `\r`, схлопывание дублей пустых строк).
+
+4. **«Завершено размышление»** — это плашка в начале блока ассистента, часть `.text`.
+   При копировании через кнопку она в текст не попадает (копируется только сам ответ).
+
+### Как скопировать ВСЕ ответы открытого чата
+
+Если чат уже открыт в Edge (debug, порт 9222) — запустите:
+
+```bash
+python scripts/qwen_read_all_answers.py
+# опции: --port 9222, --output pipeline_output/qwen_chat_all_answers.md
+```
+
+Скрипт использует `QwenClient.extract_all_answers()`: для каждого ответа ассистента
+наводится мышь, снимается класс скрытия футера, кликается кнопка «Копировать»,
+читается буфер обмена, текст нормализуется. Все ответы сохраняются одним файлом
+markdown (`## Ответ N`). Утилитарный скрипт `qwen/client.py` также имеет
+`save_all_answers(answers, output_file, chat_id)`.
+
+---
 
 ## Обратная связь (feedback)
 

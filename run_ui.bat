@@ -2,7 +2,8 @@
 rem ============================================================
 rem  LocalAssitent Web UI - launcher (uvicorn + websocket open)
 rem  Usage: run_ui.bat [port] [--no-browser]
-rem  Default: 127.0.0.1:8000, browser opens automatically
+rem  Default: 127.0.0.1:8080, browser opens automatically
+rem  Port 8000 is in use -> switched default to 8080
 rem ============================================================
 setlocal
 cd /d "%~dp0"

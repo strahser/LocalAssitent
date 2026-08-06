@@ -32,6 +32,7 @@ QWEN_SELECTORS = {
 
     # === Сообщения ассистента ===
     "assistant_messages": [
+        "//div[contains(@class, 'qwen-chat-message-assistant')]",
         ".//div[contains(@class, 'chat') and contains(@class, 'assistant')]",
         ".//div[contains(@class, 'message') and contains(@class, 'assistant')]",
         ".//div[contains(@class, 'answer')]",
@@ -74,6 +75,14 @@ QWEN_SELECTORS = {
     ),
 
     # === Копирование / код ===
+    # Кнопки копирования блоков кода / сообщений Qwen (аналог copy_answer_button
+    # из qwen/selectors.py + data-testid/class-фолбэки).
+    "copy_button": [
+        "button[aria-label*='copy' i]",
+        "[data-testid*='copy' i]",
+        "div[role='button'][aria-label*='copy' i]",
+        "button[class*='copy' i]",
+    ],
     "copy_message_button": [
         "div[data-testid='copy-button']",
         "button[aria-label*='Copy']",

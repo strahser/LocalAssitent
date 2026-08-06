@@ -58,6 +58,7 @@ class ResponseReader:
         strategy = ResponseReadyStrategyFactory.get_strategy(
             self.config.response_strategy,
             logger=self.logger,
+            selectors=self.config.selectors,
             check_interval=self.config.check_interval,
             stable_duration=self.config.stable_duration,
             debug_interval=2.0

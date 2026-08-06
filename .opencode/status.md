@@ -1,17 +1,32 @@
 # Mission Status
 
 ## Progress
-- .opencode/todo.md: 11/11 ([100%] — все [x], подтверждено Reviewer)
+- .opencode/todo.md: 100% [x] (все M/T/S закрыты: M1-M5)
 - Issues: 0 unresolved
 - Workers: 0 active
-- Verification Strategy: Reviewer full pass — 90/90 tests green, imports OK, CLI --help exit=0
-- Execution Status: pass
+- Execution Status: **COMPLETE**
 
 ## Current Phase
-MISSION COMPLETE — qwen mission concluded
+✅ **МИССИЯ ЗАВЕРШЕНА** — 4 пункта пользователя (креды, детекция ответа, UI, SQLite-промпты) + Open WebUI
 
-## Final Evidence
-- Full suite: `python -m pytest tests -q` → 90 passed (51 old + 39 new qwen)
-- Reviewer (task_ef2b6465): todo.md 11/11 [x], 12/12 headers completed, work-log updated
-- Commit `47375a1` pushed to origin/v1: `200643b..47375a1 v1 -> v1`
-- Working tree clean
+## Verification
+- `python -m pytest tests -q` → **213 passed in 30.91s** (было 111, +102 новых, 0 регрессий)
+- `py_compile` всех изменённых файлов → OK
+- Порты: **8080** = LocalAssitent UI (HTTP 200), **3000** = Open WebUI (HTTP 200)
+
+## Результаты по пунктам
+1. **Креды в UI**: поля опциональны (пусто = из .env); добавлен GET /api/credentials (email + has_password, без пароля), фронт префиллит email и показывает «пароль из .env»
+2. **Детекция ответа**: стратегии теперь используют config.selectors (не глобальные DeepSeek-селекторы); TextStabilizationStrategy — текст+innerHTML; новая CopyButtonCountStrategy (div.ds-button__background для DeepSeek, кнопки копирования для Qwen); CombinedStrategy — быстрый возврат, MIN_CONTENT_LENGTH=10
+3. **UI**: вертикальное меню (Чат/Пайплайны/Сбор/Промпты/Журнал), горизонтальный хедер+коннект-бар, чат с парами вопрос-ответ и индикатором «✅ Получено HH:MM:SS», секция Промпты CRUD
+4. **SQLite-промпты**: webui/prompts_db.py — нормализация 3NF (pipelines/prompts/prompt_config), CRUD API (/api/prompts, /api/prompt-config), выбор first/subsequent через session_message_count, сидинг из SCENARIO_CONFIGS + prompts/*.txt
+
+## Artifacts
+- detection/response_ready.py, selectors.py, qwen_selectors.py, agent/handlers/response_reader.py
+- webui/prompts_db.py (новый), webui/app.py (API+интеграция), webui/static/{index.html,style.css,app.js}
+- tests/test_response_ready_optimized.py, tests/test_prompts_db.py, tests/test_prompts_api.py
+- .gitignore: data/ + *.db
+
+## Notes
+- Оркестратор (opencode-orchestrator) удалён из глобального конфига по просьбе пользователя — нужен перезапуск opencode.
+- Open WebUI запущен на http://127.0.0.1:3000/ (первый запуск прошёл миграции).
+- LocalAssitent UI: py run_ui.py (порт 8080 по умолчанию после правки run_ui.py).

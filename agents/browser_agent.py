@@ -27,6 +27,8 @@ class BrowserAgent(BaseAgent):
         try:
             options = EdgeOptions()
             options.add_argument("--headless")
+            options.add_argument("--ignore-certificate-errors")
+            options.add_argument("--ignore-ssl-errors")
             driver = webdriver.Edge(options=options)
         except Exception as exc:
             return AgentResult(False, None, f"failed to start browser driver: {exc}")
@@ -37,6 +39,15 @@ class BrowserAgent(BaseAgent):
                     return AgentResult(False, None, "url is required for action=open")
                 driver.get(url)
                 return AgentResult(True, {"url": url, "title": driver.title})
+
+            if action == "open_text":
+                if not url:
+                    return AgentResult(False, None, "url is required for action=open_text")
+                driver.get(url)
+                import time
+                time.sleep(4)  # ждём рендер JS
+                text = driver.find_element("tag name", "body").text
+                return AgentResult(True, {"url": url, "title": driver.title, "text_len": len(text), "text": text[:6000]})
 
             if action == "screenshot":
                 path = kwargs.get("path") or kwargs.get("output_file") or "screenshot.png"

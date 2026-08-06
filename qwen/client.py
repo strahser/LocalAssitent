@@ -290,40 +290,108 @@ class QwenClient:
             marker_queries={"copy": self.selectors["copy_answer_button"]},
         )
 
-    def extract_answer(self) -> str:
-        """Копирует ответ через кнопку copy; фолбэк — текст последнего сообщения."""
+    def _reveal_response_footer(self) -> None:
+        """Раскрывает скрытый футер сообщения (response-message-footer-none).
+
+        В новом UI Qwen кнопка «Копировать» видна только после наведения мыши на
+        сообщение; CSS-класс .response-message-footer-none прячет футер.
+        """
+        try:
+            from selenium.webdriver.common.action_chains import ActionChains
+            from selenium.webdriver.common.by import By
+        except Exception:
+            return
+
+        for sel in self.selectors["assistant_message"]:
+            try:
+                els = self.driver.find_elements(By.CSS_SELECTOR, sel)
+            except Exception:
+                continue
+            if not els:
+                continue
+            try:
+                target = els[-1]
+                self.driver.execute_script(
+                    "arguments[0].scrollIntoView({block:'center'});", target
+                )
+                time.sleep(0.3)
+                ActionChains(self.driver).move_to_element(target).perform()
+                time.sleep(0.5)
+                # Снять класс скрытия у всех футеров страницы (надёжнее hover)
+                self.driver.execute_script(
+                    "document.querySelectorAll('div.response-message-footer')"
+                    ".forEach(el => el.classList.remove('response-message-footer-none'));"
+                )
+                if self.logger:
+                    self.logger.log("✅ Футер ответа раскрыт (hover + снят класс скрытия).")
+                return
+            except Exception:
+                continue
+
+    @staticmethod
+    def normalize_answer_text(text: str) -> str:
+        """Нормализует скопированный текст: CRLF→LF, без одиночных \r и дублей пустых строк."""
+        if not text:
+            return ""
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        lines = [ln.rstrip() for ln in text.split("\n")]
+        out = []
+        prev_blank = False
+        for ln in lines:
+            blank = not ln.strip()
+            if blank and prev_blank:
+                continue
+            out.append(ln)
+            prev_blank = blank
+        return "\n".join(out).strip()
+
+    def _copy_message_via_button(self) -> str:
+        """Ищет и нажимает кнопку «Копировать» у последнего сообщения. '' — не удалось."""
         try:
             from agent.clipboard import ClipboardManager
             from selenium.webdriver.common.by import By
         except Exception:
             ClipboardManager = None
             By = None
+        if By is None or ClipboardManager is None:
+            return ""
 
-        if By is not None:
-            for sel in self.selectors["copy_answer_button"]:
+        for sel in self.selectors["copy_answer_button"]:
+            try:
+                els = self.driver.find_elements(By.CSS_SELECTOR, sel)
+            except Exception:
+                continue
+            for el in els:
                 try:
-                    els = self.driver.find_elements(By.CSS_SELECTOR, sel)
+                    if el.is_displayed():
+                        self.driver.execute_script(
+                            "arguments[0].scrollIntoView({block:'center'});", el
+                        )
+                        time.sleep(0.3)
+                        el.click()
+                        time.sleep(0.5)
+                        text = ClipboardManager.get_text() or ""
+                        if text:
+                            if self.logger:
+                                self.logger.log(
+                                    f"✅ ответ скопирован в буфер (длина {len(text)})"
+                                )
+                            return self.normalize_answer_text(text)
                 except Exception:
                     continue
-                for el in els:
-                    try:
-                        if el.is_displayed():
-                            self.driver.execute_script(
-                                "arguments[0].scrollIntoView({block:'center'});", el
-                            )
-                            time.sleep(0.3)
-                            el.click()
-                            time.sleep(0.5)
-                            if ClipboardManager is not None:
-                                text = ClipboardManager.get_text()
-                                if text:
-                                    if self.logger:
-                                        self.logger.log(
-                                            f"✅ ответ скопирован в буфер (длина {len(text)})"
-                                        )
-                                    return text.strip()
-                    except Exception:
-                        continue
+        return ""
+
+    def extract_answer(self) -> str:
+        """Копирует ответ через кнопку copy; фолбэк — текст последнего сообщения."""
+        try:
+            from selenium.webdriver.common.by import By
+        except Exception:
+            By = None
+
+        self._reveal_response_footer()
+        text = self._copy_message_via_button()
+        if text:
+            return text
 
         # Фолбэк: текст последнего сообщения ассистента
         if By is not None:
@@ -342,8 +410,114 @@ class QwenClient:
                             self.logger.log(
                                 f"✅ ответ извлечён из сообщения (длина {len(text)})"
                             )
-                        return text.strip()
+                        return self.normalize_answer_text(text)
         return ""
+
+    def extract_all_answers(self) -> list:
+        """Копирует ВСЕ ответы ассистента через кнопки «Копировать».
+
+        Возвращает список dict: {'index': int, 'text': str, 'error': str|None}.
+        Наведение выполняется на каждый блок ответа, класс скрытия снимается,
+        буфер обмена читается после каждого клика.
+        """
+        try:
+            from agent.clipboard import ClipboardManager
+            from selenium.webdriver.common.action_chains import ActionChains
+            from selenium.webdriver.common.by import By
+        except Exception:
+            ClipboardManager = None
+            ActionChains = None
+            By = None
+
+        results = []
+        if By is None or ClipboardManager is None:
+            return results
+
+        messages = []
+        for sel in self.selectors["assistant_message"]:
+            try:
+                messages = self.driver.find_elements(By.CSS_SELECTOR, sel)
+            except Exception:
+                continue
+            if messages:
+                break
+
+        for i, message in enumerate(messages, start=1):
+            entry = {"index": i, "text": "", "error": None}
+            try:
+                self.driver.execute_script(
+                    "arguments[0].scrollIntoView({block:'center'});", message
+                )
+                time.sleep(0.3)
+                if ActionChains is not None:
+                    ActionChains(self.driver).move_to_element(message).perform()
+                    time.sleep(0.4)
+                self.driver.execute_script(
+                    "const el = arguments[0];"
+                    "el.querySelectorAll('div.response-message-footer')"
+                    ".forEach(f => f.classList.remove('response-message-footer-none'));",
+                    message,
+                )
+
+                copied = ""
+                for sel in self.selectors["copy_answer_button"]:
+                    try:
+                        els = message.find_elements(By.CSS_SELECTOR, sel)
+                    except Exception:
+                        continue
+                    for el in els:
+                        try:
+                            if el.is_displayed():
+                                el.click()
+                                time.sleep(0.6)
+                                copied = ClipboardManager.get_text() or ""
+                                if copied:
+                                    break
+                        except Exception:
+                            continue
+                    if copied:
+                        break
+
+                if copied:
+                    entry["text"] = self.normalize_answer_text(copied)
+                else:
+                    entry["text"] = self.normalize_answer_text(message.text or "")
+                    entry["error"] = "copy button not found/clicked, fallback .text"
+                if self.logger:
+                    self.logger.log(
+                        f"✅ Ответ {i}: {len(entry['text'])} симв."
+                        + (f" ({entry['error']})" if entry["error"] else "")
+                    )
+            except Exception as e:
+                entry["error"] = str(e)
+            results.append(entry)
+            time.sleep(0.8)
+
+        return results
+
+    def save_all_answers(self, answers: list, output_file: str,
+                         chat_id: str = "") -> str:
+        """Сохраняет все ответы в один markdown. Возвращает путь."""
+        from datetime import datetime
+
+        parent = os.path.dirname(os.path.abspath(output_file))
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+
+        with open(output_file, "w", encoding="utf-8", newline="\n") as f:
+            f.write("# Ответы Qwen (chat.qwen.ai)\n\n")
+            f.write(f"**Чат:** {chat_id}\n\n")
+            f.write(f"**Дата:** {datetime.now().isoformat(timespec='seconds')}\n\n")
+            for a in answers:
+                f.write("---\n\n")
+                f.write(f"## Ответ {a['index']}\n\n")
+                if a.get("error"):
+                    f.write(f"_{a['error']}_\n\n")
+                f.write((a.get("text") or "").strip() + "\n\n")
+            f.write("---\n")
+        if self.logger:
+            self.logger.log(f"💾 Все ответы сохранены: {output_file} ({len(answers)} шт.)")
+        return output_file
 
     def save_answer(self, answer: str, output_file: str) -> str:
         """Сохраняет ответ в markdown (шапка: дата + имя файла). Возвращает путь."""

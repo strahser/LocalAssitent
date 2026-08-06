@@ -41,8 +41,11 @@ SELECTORS = {
     "code_block_pre": "pre",
     "code_language_label": "span.d813de27",
 
-    # === Кнопка копирования для блоков кода (старый селектор) ===
-    "copy_button": "span.ds-button__content span.code-info-button-text",
+    # === Кнопка копирования для блоков кода (старый селектор + div.ds-button__background) ===
+    "copy_button": [
+        "span.ds-button__content span.code-info-button-text",
+        "div.ds-button__background",
+    ],
 
     # === Панель действий (для копирования сообщения) ===
     "action_panel_container": ".//div[contains(@class, 'ds-flex') and not(ancestor::*[contains(@class, 'code') or contains(@class, 'highlight')])]",
