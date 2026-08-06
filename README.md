@@ -68,6 +68,8 @@ LocalAssitent/
 │   ├── read_response.py
 │   ├── qwen_task.py         # Задача для chat.qwen.ai через Edge CDP
 │   ├── qwen_read_all_answers.py  # Копирование ВСЕХ ответов открытого чата Qwen в MD
+│   ├── qwen_send_prompt.py  # Отправка промпта в chat.qwen.ai (оверлей, nativeSetter)
+│   ├── qwen_wait_answer.py  # Ожидание стабилизации ответа / маркера конца
 │   ├── apply_cloud.py       # Применение ответа облачного ИИ (docs/AI_TASK_*.md)
 │   └── test_send.py
 │
@@ -416,6 +418,21 @@ python scripts/qwen_read_all_answers.py
 читается буфер обмена, текст нормализуется. Все ответы сохраняются одним файлом
 markdown (`## Ответ N`). Утилитарный скрипт `qwen/client.py` также имеет
 `save_all_answers(answers, output_file, chat_id)`.
+
+### Готовые скрипты Агента-3 (браузерный мост)
+
+Все три — в `scripts\`, переиспользуй (не создавай заново):
+
+| Скрипт | Что делает | Команда |
+|---|---|---|
+| `qwen_send_prompt.py` | Отправка промпта в текущую вкладку chat.qwen.ai: убирает блокирующий оверлей `.page-loading` (z=49), вставка nativeSetter, отправка, проверка очистки поля | `python scripts\qwen_send_prompt.py --file <файл задания>` (формат конвейера: строка 1 — путь ответа, строки 4+ — промпт) |
+| `qwen_wait_answer.py` | Ожидание стабилизации ответа (2 замера), распознавание «Сетевая ошибка» (код 3 → ретрай), опционально маркер конца | `python scripts\qwen_wait_answer.py --timeout 600 --marker КОНЕЦ_ТЗ` |
+| `qwen_read_all_answers.py` | Копирование ВСЕХ ответов через кнопки «Копировать» в один markdown | `python scripts\qwen_read_all_answers.py` |
+
+**Блокирующий оверлей `.page-loading`** (найдено 2026-08-06): после загрузки страницы он
+висит над полем ввода (z-index 49, pointer-events: auto) и ломает React-ввод — текст вставляется,
+но кнопка send disabled и поле не очищается. Решение в `qwen_send_prompt.py`:
+`el.style.pointerEvents='none'; el.style.display='none'`, затем nativeSetter + input/change.
 
 ---
 
