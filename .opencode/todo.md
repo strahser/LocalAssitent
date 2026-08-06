@@ -3,7 +3,19 @@
 ## Project Context
 - Репозиторий: e:\ПлагиныРевит\LocalAssitent (ветка v1, origin: github.com/strahser/LocalAssitent)
 - Полный контекст: .opencode/context.md
-- Полная проверка: `python -m pytest tests -q` (213 passed)
+- Полная проверка: `python -m pytest tests -q` (216 passed)
+
+## M7: Самовосстановление Qwen + чтение всех ответов | status: completed
+### T7.1: qwen/client.py + scripts + скилл Агента-3 | agent:Worker | status: completed
+- [x] S7.1.1: QwenClient.extract_all_answers() / save_all_answers() — копирование ВСЕХ ответов через кнопки «Копировать» | size:L | verified: 4+ ответа из чата
+- [x] S7.1.2: QwenClient.normalize_answer_text() — CRLF→LF, схлопывание дублей пустых строк | size:M | verified: тест
+- [x] S7.1.3: QwenClient._reveal_response_footer() — hover + JS-снятие response-message-footer-none | size:M | verified: A-05/A-07
+- [x] S7.1.4: qwen/selectors.py: copy_answer_button + response_footer под актуальный DOM | size:S | verified
+- [x] S7.1.5: scripts/qwen_read_all_answers.py — CLI чтения всех ответов | size:M | verified
+- [x] S7.1.6: Обработка сетевых ошибок Qwen (ретрай вставки промпта, до 3 попыток) | size:M | verified: A-07
+- [x] S7.1.7: Скилл heatloss-browser-bridge + ПРОМПТ_браузерного_агента — самовосстановление | size:M | verified
+- [x] S7.1.8: pytest tests -q = 216 passed | size:S | verified: 216 passed in 33.97s
+- [x] S7.1.9: Пуш в origin/v1 | size:S | verified: 6be4bc0
 
 ## M6: Промпты из хардкода → БД | status: completed
 ### T6.1: Выпилить хардкод промптов из webui/app.py | agent:Worker | status: completed
