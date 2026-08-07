@@ -86,6 +86,23 @@ def _connect(db_path=None) -> sqlite3.Connection:
     return conn
 
 
+def _upsert_merge_tdl(conn, content: str):
+    """Обновить существующий промпт merge/first содержимым TDL (миграция старых БД)."""
+    row = conn.execute(
+        "SELECT id FROM prompts WHERE pipeline_id=(SELECT id FROM pipelines WHERE key='merge') "
+        "AND stage='first' LIMIT 1").fetchone()
+    if row:
+        conn.execute("UPDATE prompts SET content=?, name='default merge (TDL)', updated_at=? WHERE id=?",
+                     (content, _now(), row["id"]))
+    # merge/both тоже обновляем, если есть
+    row2 = conn.execute(
+        "SELECT id FROM prompts WHERE pipeline_id=(SELECT id FROM pipelines WHERE key='merge') "
+        "AND stage='both' LIMIT 1").fetchone()
+    if row2:
+        conn.execute("UPDATE prompts SET content=?, name='default merge (TDL)', updated_at=? WHERE id=?",
+                     (content, _now(), row2["id"]))
+
+
 def _seed_defaults(conn):
     """Сидинг дефолтных промптов (qa/code first; improve analyze+review)."""
     from config import SCENARIO_CONFIGS
@@ -114,14 +131,20 @@ def _seed_defaults(conn):
     if code_tpl:
         seeds.append(("code", "first", "default code", code_tpl))
 
-    # merge: промпт для «общего файла» (контекст проектов → облако).
-    # Раньше был захардкожен в webui/app.py, теперь живёт в БД.
-    merge_tpl = (
-        "Проанализируй приведённый ниже код проекта и дай структурированные рекомендации "
-        "(архитектура, ошибки, безопасность, производительность, тестируемость). "
-        "Соблюдай формат ответа из инструкции в начале контекста."
-    )
-    seeds.append(("merge", "first", "default merge", merge_tpl))
+    # merge: промпт для «сводного файла» (TDL — источник истины).
+    # Локальный промпт пользователя вставляется в начало файла, поверх общего TDL-задания.
+    general = PROJECT_ROOT / "prompts" / "general_task.txt"
+    if general.exists():
+        merge_tpl = general.read_text(encoding="utf-8", errors="replace")
+    else:
+        merge_tpl = (
+            "Выполни локальный промпт пользователя по структуре TDL: задача → отчёт → вердикт. "
+            "Доказательства обязательны (файлы, команды сборки/тестов, git diff). "
+            "Формат ответа — из инструкции в начале контекста."
+        )
+    seeds.append(("merge", "first", "default merge (TDL)", merge_tpl))
+    # Обновляем существующий merge/first содержимым TDL (миграция старых БД).
+    _upsert_merge_tdl(conn, merge_tpl)
 
     improve_analyze = PROJECT_ROOT / "prompts" / "improve_analyze.txt"
     improve_review = PROJECT_ROOT / "prompts" / "improve_review.txt"
@@ -138,10 +161,9 @@ def _seed_defaults(conn):
         if pid:
             ids.setdefault(key, {})[stage] = pid
 
-    # prompt_config: qa/code/merge -> first; improve -> first + subsequent
-    for key, stages in (("qa", ("first",)), ("code", ("first",)),
-                        ("merge", ("first",)),
-                        ("improve", ("first", "subsequent"))):
+    # prompt_config: qa/merge -> first
+    for key, stages in (("qa", ("first",)),
+                        ("merge", ("first",))):
         pid = pipe_id(key)
         if pid is None:
             continue
@@ -167,6 +189,11 @@ def _ensure_schema(conn):
     conn.commit()
     if conn.execute("SELECT COUNT(*) FROM prompts").fetchone()[0] == 0:
         _seed_defaults(conn)
+        conn.commit()
+    # Всегда обновляем merge/first содержимым TDL (миграция старых БД)
+    general = PROJECT_ROOT / "prompts" / "general_task.txt"
+    if general.exists():
+        _upsert_merge_tdl(conn, general.read_text(encoding="utf-8", errors="replace"))
         conn.commit()
 
 

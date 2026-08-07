@@ -43,20 +43,18 @@
 </div>
 
 <div class="layout">
-  <!-- Вертикальное меню слева -->
+  <!-- Вертикальное меню слева (два режима) -->
   <nav class="sidenav">
-    <button class="nav-btn active" data-view="chat">💬 Чат</button>
-    <button class="nav-btn" data-view="pipeline">⚙️ Пайплайны</button>
-    <button class="nav-btn" data-view="collect">📄 Сбор файлов</button>
-    <button class="nav-btn" data-view="prompts">🧠 Промпты</button>
+    <button class="nav-btn active" data-view="chat">💬 Вопрос — ответ</button>
+    <button class="nav-btn" data-view="merge">📄 Сводный файл</button>
     <button class="nav-btn" data-view="logs">📜 Журнал</button>
   </nav>
 
   <main>
-    <!-- ============ ЧАТ ============ -->
+    <!-- ============ ВОПРОС — ОТВЕТ ============ -->
     <section id="view-chat" class="view">
       <div class="card">
-        <h2>💬 Чат</h2>
+        <h2>💬 Вопрос — ответ</h2>
         <div id="chatLog" class="chat-log"></div>
         <div class="chat-input-row">
           <label class="chk">
@@ -73,121 +71,49 @@
       </div>
     </section>
 
-    <!-- ============ ПАЙПЛАЙНЫ ============ -->
-    <section id="view-pipeline" class="view hidden">
+    <!-- ============ СВОДНЫЙ ФАЙЛ (merge) ============ -->
+    <section id="view-merge" class="view hidden">
       <div class="card">
-        <h2>⚙️ Пайплайн</h2>
+        <h2>📄 Формирование сводного файла + отправка</h2>
+        <p class="hint">
+          Собирает файлы директории в один сводный файл. В начале файла — локальный промпт
+          пользователя (вставьте или выберите из базы промптов), затем — общее TDL-задание
+          (структура «задача → отчёт → вердикт», доказательства обязательны).
+        </p>
         <div class="row">
-          <label>Пайплайн:
-            <select id="pipeline">
-              <option value="qa">Чат: вопрос — ответ (Q&A)</option>
-              <option value="code">Чат: вопрос — код</option>
-              <option value="merge">Проект → контекст → облако</option>
-              <option value="improve">Improve: анализ проекта</option>
-            </select>
-          </label>
-          <label>Директория (для merge/improve):
-            <input id="directory" type="text" placeholder="пусто = проект LocalAssitent">
-          </label>
-          <label class="chk">
-            <input id="newChat" type="checkbox"> Новый чат
-          </label>
-        </div>
-        <textarea id="pipelineMessage" rows="6" placeholder="Вопрос или задача для облачного ИИ..."></textarea>
-        <div class="row">
-          <button id="btnRun" class="btn btn-primary">🚀 Выполнить</button>
-          <button id="btnCopyPipeline" class="btn btn-ghost">📋 Копировать ответ</button>
-        </div>
-        <div id="busyPipeline" class="busy hidden">⏳ Работаю... облачный чат может отвечать 1–5 минут</div>
-        <div id="notePipeline" class="note"></div>
-        <div id="output" class="output">—</div>
-      </div>
-    </section>
-
-    <!-- ============ СБОР ФАЙЛОВ ============ -->
-    <section id="view-collect" class="view hidden">
-      <div class="card">
-        <h2>📄 Скопировать данные в один файл</h2>
-        <div class="row">
-          <label>Тип проекта:
-            <select id="collectType">
-              <option value="auto">Авто (определить)</option>
-              <option value="cs">C# (.cs)</option>
-              <option value="py">Python (.py)</option>
-            </select>
+          <label>Директория (проект):
+            <input id="mergeDir" type="text" placeholder="пусто = проект LocalAssitent">
           </label>
           <label>Имя файла:
-            <input id="collectFilename" type="text" value="cloud_context.txt">
+            <input id="mergeFilename" type="text" value="cloud_context.txt">
+          </label>
+          <label class="chk">
+            <input id="mergeNewChat" type="checkbox"> Новый чат
           </label>
         </div>
-        <label>Директории (по одной на строку):
-          <textarea id="collectDirs" rows="4"
-            placeholder="d:/Projects/HeatLossRevit2&#10;d:/Projects/my-python-app"></textarea>
+
+        <!-- Окно локального промпта + кнопка из базы -->
+        <label>Локальный промпт пользователя (вставляется в начало сводного файла):
+          <textarea id="mergePrompt" rows="6"
+            placeholder="Ваш промпт для ИИ (что сделать с кодом проекта)..."></textarea>
         </label>
         <div class="row">
-          <button id="btnCollect" class="btn btn-primary">📄 Скопировать в один файл</button>
-        </div>
-        <div id="collectResult" class="collect-result"></div>
-      </div>
-    </section>
-
-    <!-- ============ ПРОМПТЫ (CRUD) ============ -->
-    <section id="view-prompts" class="view hidden">
-      <div class="card">
-        <h2>🧠 Промпты пайплайнов (SQLite)</h2>
-        <p class="hint">
-          Управление промптами: какой использовать для <b>первого</b> сообщения сессии
-          (stage = first) и для <b>последующих</b> (stage = subsequent). stage = both —
-          дефолтный промпт для обоих случаев, если в конфигурации ничего не назначено.
-        </p>
-
-        <h3 class="subhead">Конфигурация first / subsequent</h3>
-        <div id="promptConfigBox" class="config-box"></div>
-
-        <h3 class="subhead">Новый промпт</h3>
-        <div class="prompt-form">
-          <div class="row">
-            <label>Пайплайн:
-              <select id="pfPipeline">
-                <option value="qa">Чат Q&A</option>
-                <option value="code">Вопрос — код</option>
-                <option value="merge">Проект → контекст → облако</option>
-                <option value="improve">Improve: анализ</option>
-              </select>
-            </label>
-            <label>Stage:
-              <select id="pfStage">
-                <option value="both">both (по умолчанию)</option>
-                <option value="first">first (первое сообщение)</option>
-                <option value="subsequent">subsequent (последующие)</option>
-              </select>
-            </label>
-            <label>Название:
-              <input id="pfName" type="text" placeholder="напр. default qa">
-            </label>
-          </div>
-          <label>Содержимое промпта:
-            <textarea id="pfContent" rows="5" placeholder="Текст промпта..."></textarea>
+          <label>Из базы промптов:
+            <select id="promptSelect"></select>
           </label>
-          <div class="row">
-            <button id="btnPromptCreate" class="btn btn-primary">➕ Создать промпт</button>
-            <button id="btnPromptCancel" class="btn btn-ghost hidden">✖ Отмена (редактирование)</button>
-            <input type="hidden" id="pfEditId" value="">
-          </div>
+          <button id="btnUsePrompt" class="btn btn-ghost" type="button">📋 Вставить в окно</button>
+          <button id="btnResetPrompt" class="btn btn-ghost" type="button">↺ По умолчанию (TDL)</button>
         </div>
 
-        <h3 class="subhead">Все промпты</h3>
-        <div class="prompt-list">
-          <table class="prompt-table">
-            <thead>
-              <tr>
-                <th>ID</th><th>Пайплайн</th><th>Stage</th><th>Название</th>
-                <th>Активен</th><th>Действия</th>
-              </tr>
-            </thead>
-            <tbody id="promptTableBody"></tbody>
-          </table>
+        <div class="row">
+          <button id="btnMergeSend" class="btn btn-primary">🚀 Собрать + отправить в ИИ</button>
+          <button id="btnMergeOnly" class="btn btn-ghost">📄 Только собрать файл</button>
+          <button id="btnCopyMerge" class="btn btn-ghost">📋 Копировать ответ</button>
         </div>
+        <div id="busyMerge" class="busy hidden">⏳ Работаю... облачный чат может отвечать 1–5 минут</div>
+        <div id="noteMerge" class="note"></div>
+        <div id="mergeResult" class="collect-result"></div>
+        <div id="output" class="output">—</div>
       </div>
     </section>
 
@@ -201,33 +127,24 @@
   </main>
 </div>
 
-<!-- Модальное окно справки по пайплайнам -->
+<!-- Модальное окно справки -->
 <div id="helpModal" class="modal hidden">
   <div class="modal-content">
     <div class="modal-header">
-      <h3>Справка по пайплайнам</h3>
+      <h3>Справка</h3>
       <button id="btnCloseHelp" class="modal-close">&times;</button>
     </div>
     <div class="modal-body">
       <div class="help-item">
-        <h4>💬 Чат: вопрос — ответ (Q&A)</h4>
-        <p>Простой диалог с облачным ИИ. Отправьте вопрос — получите текстовый ответ. Подходит для консультаций, объяснений, brainstorming.</p>
+        <h4>💬 Вопрос — ответ (Q&A)</h4>
+        <p>Простой диалог с облачным ИИ. Отправьте вопрос — получите текстовый ответ.</p>
       </div>
       <div class="help-item">
-        <h4>💻 Чат: вопрос — код</h4>
-        <p>Специализированный режим для разработки. Опишите задачу — получите готовый код с объяснениями. Оптимизирован для C# и Python.</p>
-      </div>
-      <div class="help-item">
-        <h4>📦 Проект → контекст → облако</h4>
-        <p>Автоматический сбор всех файлов проекта в единый контекст и отправка в облако. Использует фильтр временных файлов (bin, obj, .git и т.д.).</p>
-      </div>
-      <div class="help-item">
-        <h4>🔍 Improve: анализ проекта</h4>
-        <p>Глубокий анализ кода проекта. ИИ изучит структуру, найдёт проблемы, предложит улучшения.</p>
-      </div>
-      <div class="help-item">
-        <h4>🧠 Промпты (SQLite)</h4>
-        <p>CRUD-управление промптами пайплайнов. Первое сообщение сессии использует промпт stage=first, последующие — stage=subsequent. Промпт stage=both — фолбэк, если конфигурация пуста.</p>
+        <h4>📄 Сводный файл</h4>
+        <p>Собирает файлы проекта в один контекст. В начале — локальный промпт пользователя
+           (вставьте в окно или выберите из базы промптов), затем общее TDL-задание.
+           «Собрать + отправить» — соберёт и отправит в ИИ; «Только собрать файл» — сохранит
+           сводный файл для скачивания без отправки.</p>
       </div>
     </div>
   </div>

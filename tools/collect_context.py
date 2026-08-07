@@ -188,6 +188,7 @@ def collect_context(
     encoding: str = "utf-8",
     add_task: bool = True,
     task_file: Optional[str] = None,
+    local_prompt: Optional[str] = None,
     add_summary: bool = True,
     include_patterns: Optional[List[str]] = None,
     exclude_patterns: Optional[List[str]] = None,
@@ -217,6 +218,16 @@ def collect_context(
     total_skipped_temp = sum(st for _, _, _, st in collected)
 
     parts = []
+
+    # «Локальный промпт пользователя» — самое начало (если задан): конкретная задача,
+    # которую ИИ должен выполнить поверх общего TDL-задания.
+    if local_prompt and str(local_prompt).strip():
+        sep = "=" * 72
+        parts.append(
+            "\n" + sep + "\n"
+            "# ЛОКАЛЬНЫЙ ПРОМПТ ПОЛЬЗОВАТЕЛЯ (ЗАДАЧА)\n" + sep + "\n\n"
+            + str(local_prompt).strip() + "\n\n"
+        )
 
     # «Общее задание» — в НАЧАЛО выходного файла
     if add_task:

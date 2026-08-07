@@ -158,20 +158,13 @@ def send_message(message: str, new_chat: bool = False) -> dict:
 
 PIPELINES = {
     "qa": {
-        "label": "Чат: вопрос — ответ (Q&A)",
+        "label": "Вопрос — ответ (Q&A)",
         "description": "Вопрос → подробный структурированный ответ (Markdown).",
     },
-    "code": {
-        "label": "Чат: вопрос — код",
-        "description": "Задача → решение + извлечённый код (итоговый полный ответ).",
-    },
     "merge": {
-        "label": "Проект → контекст → облако",
-        "description": "Собрать файлы директории (collect_context, с «общим заданием») и отправить облачному ИИ.",
-    },
-    "improve": {
-        "label": "Improve: анализ проекта",
-        "description": "Один проход цикла улучшения: контекст + prompts/improve_analyze.txt (без авто-применения).",
+        "label": "Формирование сводного файла (контекст) + отправка",
+        "description": "Собрать файлы директории в сводный файл (в начале — TDL-промпт), "
+                       "локальный промпт пользователя, отправить облачному ИИ.",
     },
 }
 
@@ -198,7 +191,7 @@ def _pipeline_message(pipeline: str, message: str, stage: str = "both") -> str:
     return message
 
 
-def _collect_context_to(directory: str, out_name: str) -> str:
+def _collect_context_to(directory: str, out_name: str, local_prompt: str = "") -> str:
     """Собирает контекст директории через tools.collect_context, возвращает содержимое."""
     from tools.collect_context import collect_context
 
@@ -206,7 +199,8 @@ def _collect_context_to(directory: str, out_name: str) -> str:
     out = str(PROJECT_ROOT / "pipeline_output" / out_name)
     lg = get_logger()
     lg.log(f"📦 Сбор контекста из: {d}")
-    res = collect_context([d], output_file=out, add_task=True, add_summary=True)
+    res = collect_context([d], output_file=out, add_task=True, add_summary=True,
+                          local_prompt=local_prompt)
     lg.log(f"📦 {res}")
     content = Path(out).read_text(encoding="utf-8", errors="replace")
     lg.log(f"📦 Размер контекста: {len(content)} символов")
@@ -222,11 +216,14 @@ def _safe_filename(name: str) -> str:
 
 
 def collect_to_file(directories, project_type: str = "auto",
-                    filename: str = "cloud_context.txt") -> dict:
+                    filename: str = "cloud_context.txt",
+                    local_prompt: str = "") -> dict:
     """Собирает файлы нескольких директорий в один TXT (переиспользует tools.collect_context).
 
     project_type: auto | cs | py. Для auto тип определяется автоматически;
     для cs/py все указанные директории считаются этого типа.
+    local_prompt: локальный промпт пользователя — вставляется в начало сводного файла
+    (поверх общего TDL-задания из prompts/general_task.txt).
     """
     dirs = [d for d in (directories or []) if isinstance(d, str) and d.strip()]
     out_name = _safe_filename(filename)
@@ -253,6 +250,7 @@ def collect_to_file(directories, project_type: str = "auto",
         project_types=project_types,
         add_task=True,
         add_summary=True,
+        local_prompt=local_prompt,
     )
     size = Path(out).stat().st_size
     lg.log(f"🖨️ {res}")
@@ -275,25 +273,17 @@ def run_pipeline(pipeline: str, message: str,
     stage = "first" if session_message_count == 0 else "subsequent"
 
     if pipeline == "merge":
-        content, out = _collect_context_to(directory or "", "ui_merged_context.txt")
+        # message = локальный промпт пользователя (вставляется в начало сводного файла),
+        # поверх общего TDL-задания из prompts/general_task.txt
+        content, out = _collect_context_to(directory or "", "ui_merged_context.txt",
+                                           local_prompt=message)
         from webui.prompts_db import get_prompt_for
         prompt = get_prompt_for("merge", stage) or get_prompt_for("merge", "both") or (
-            "Проанализируй приведённый ниже код проекта и дай структурированные рекомендации "
-            "(архитектура, ошибки, безопасность, производительность, тестируемость). "
-            "Соблюдай формат ответа из инструкции в начале контекста."
+            "Выполни локальный промпт пользователя, соблюдая формат ответа из "
+            "инструкции в начале контекста (TDL)."
         )
         result = send_message(f"{prompt}\n\n{content}", new_chat=new_chat)
-        result["note"] = f"Контекст: {out} ({len(content)} символов)"
-        return result
-
-    if pipeline == "improve":
-        content, out = _collect_context_to(directory or "", "ui_improve_context.txt")
-        from webui.prompts_db import get_prompt_for
-        prompt = get_prompt_for("improve", stage) or get_prompt_for("improve", "both") or (
-            "Проанализируй код проекта и предложи улучшения."
-        )
-        result = send_message(f"{prompt}\n\n{content}", new_chat=new_chat)
-        result["note"] = f"Контекст: {out} ({len(content)} символов). Один проход анализа, без авто-применения."
+        result["note"] = f"Сводный файл: {out} ({len(content)} символов)"
         return result
 
     prompt = _pipeline_message(pipeline, message, stage=stage)
@@ -528,6 +518,7 @@ def api_collect(payload: dict):
             payload.get("directories"),
             project_type=payload.get("project_type", "auto"),
             filename=payload.get("filename", "cloud_context.txt"),
+            local_prompt=payload.get("local_prompt", ""),
         )
         return _ok(result)
     except ValueError as e:
