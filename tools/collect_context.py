@@ -193,18 +193,33 @@ def collect_context(
     include_patterns: Optional[List[str]] = None,
     exclude_patterns: Optional[List[str]] = None,
 ) -> str:
-    """Собирает файлы из директорий, добавляет общее задание в начало, пишет один TXT."""
-    roots = [Path(d).resolve() for d in dirs if d]
-    if not roots:
-        return "Не указаны директории."
+    """Собирает файлы из директорий и отдельных файлов, добавляет задание, пишет один TXT.
+
+    dirs: список путей — каждая запись может быть директорией или отдельным файлом.
+    Файлы включаются как есть (с проверкой размера и «временности», без фильтра по
+    расширению) — удобно когда пользователь явно перечислил конкретные файлы.
+    """
+    raw = [Path(d).resolve() for d in dirs if d]
+    if not raw:
+        return "Не указаны директории/файлы."
+
+    dir_roots = [r for r in raw if r.is_dir()]
+    file_roots = [r for r in raw if r.is_file()]
+    not_found = [r for r in raw if not r.exists()]
+
+    if not dir_roots and not file_roots:
+        return "Не найдено ни директорий, ни файлов: " + "; ".join(str(r) for r in raw)
 
     if project_types is None:
-        project_types = detect_project_types([str(r) for r in roots])
+        project_types = detect_project_types([str(r) for r in dir_roots])
 
     eff_exclude = set(DEFAULT_TEMP_EXCLUDE_DIRS) | (set(exclude_dirs) if exclude_dirs else set())
 
     collected = []  # [(root, files, skipped_size, skipped_temp)]
-    for root in roots:
+    total_skipped_size = 0
+    total_skipped_temp = 0
+
+    for root in dir_roots:
         pt = project_types.get(str(root), "unknown")
         ext = extensions if extensions else get_extensions(pt)
         files, skipped_size, skipped_temp = _collect_files_with_stats(
@@ -212,10 +227,23 @@ def collect_context(
             include_patterns, exclude_patterns, max_file_size,
         )
         collected.append((root, files, skipped_size, skipped_temp))
+        total_skipped_size += skipped_size
+        total_skipped_temp += skipped_temp
+
+    for r in file_roots:
+        if is_temp_file(r):
+            total_skipped_temp += 1
+            continue
+        try:
+            if r.stat().st_size > max_file_size:
+                total_skipped_size += 1
+                continue
+        except OSError:
+            continue
+        # root = родительская директория: format_file_block покажет "FILE: <имя>"
+        collected.append((r.parent, [r], 0, 0))
 
     total_files = sum(len(files) for _, files, _, _ in collected)
-    total_skipped_size = sum(sk for _, _, sk, _ in collected)
-    total_skipped_temp = sum(st for _, _, _, st in collected)
 
     parts = []
 
@@ -248,8 +276,9 @@ def collect_context(
                     lines = 0
                 ext_stats[ext] = ext_stats.get(ext, 0) + 1
                 total_lines += lines
-        roots_line = "; ".join(str(r) for r in roots)
-        types_line = "; ".join(f"{r}={project_types.get(str(r), '?')}" for r in roots)
+        roots_line = "; ".join(str(r) for r in (dir_roots + file_roots + not_found))
+        types_line = "; ".join(f"{r}={project_types.get(str(r), '?') if r.is_dir() else 'file'}"
+                               for r in (dir_roots + file_roots))
         summary = (
             f"{'#' * 72}\n"
             f"# CLOUD PROJECT CONTEXT\n"
@@ -274,12 +303,14 @@ def collect_context(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text("".join(parts), encoding=encoding)
 
-    types_line = "; ".join(f"{r}={project_types.get(str(r), '?')}" for r in roots)
+    types_line = "; ".join(f"{r}={project_types.get(str(r), '?') if r.is_dir() else 'file'}"
+                           for r in (dir_roots + file_roots))
     return (
         f"Готово: {total_files} файлов → {output_file}\n"
         f"Размер: {output_path.stat().st_size:,} байт\n"
-        f"Типы проектов: {types_line}\n"
-        f"Исключено временных файлов (по имени): {total_skipped_temp}; "
+        f"Типы корней: {types_line}\n"
+        + (f"Пропущено (не найдено): {not_found}\n" if not_found else "")
+        + f"Исключено временных файлов (по имени): {total_skipped_temp}; "
         f"по размеру (> {max_file_size:,} байт): {total_skipped_size}"
     )
 

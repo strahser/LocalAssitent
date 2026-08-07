@@ -18,6 +18,7 @@ import os
 import sys
 import time
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -33,6 +34,7 @@ from logger import Logger
 from config import PROVIDERS, QWEN_MODELS, DEFAULT_MODEL
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+PROMPTS_DIR = PROJECT_ROOT / "prompts"
 
 app = FastAPI(title="LocalAssitent UI", version="1.0.0")
 
@@ -191,19 +193,24 @@ def _pipeline_message(pipeline: str, message: str, stage: str = "both") -> str:
     return message
 
 
-def _collect_context_to(directory: str, out_name: str, local_prompt: str = "",
+def _collect_context_to(directories, out_name: str, local_prompt: str = "",
                         project_type: str = "auto") -> str:
-    """Собирает контекст директории через tools.collect_context, возвращает содержимое."""
+    """Собирает контекст директорий/файлов через tools.collect_context, возвращает содержимое.
+
+    directories: список путей (директории и/или отдельные файлы).
+    """
     from tools.collect_context import collect_context
 
-    d = directory or str(PROJECT_ROOT)
+    paths = [p for p in (directories or []) if isinstance(p, str) and p.strip()]
+    if not paths:
+        paths = [str(PROJECT_ROOT)]
     out = str(PROJECT_ROOT / "pipeline_output" / out_name)
     lg = get_logger()
-    lg.log(f"📦 Сбор контекста из: {d} (тип={project_type})")
+    lg.log(f"📦 Сбор контекста из: {paths} (тип={project_type})")
     ptypes = None
     if project_type in ("cs", "py", "mixed"):
-        ptypes = {str(Path(d).resolve()): project_type}
-    res = collect_context([d], output_file=out, add_task=True, add_summary=True,
+        ptypes = {str(Path(d).resolve()): project_type for d in paths}
+    res = collect_context(paths, output_file=out, add_task=True, add_summary=True,
                           local_prompt=local_prompt, project_types=ptypes)
     lg.log(f"📦 {res}")
     content = Path(out).read_text(encoding="utf-8", errors="replace")
@@ -222,34 +229,33 @@ def _safe_filename(name: str) -> str:
 def collect_to_file(directories, project_type: str = "auto",
                     filename: str = "cloud_context.txt",
                     local_prompt: str = "") -> dict:
-    """Собирает файлы нескольких директорий в один TXT (переиспользует tools.collect_context).
+    """Собирает файлы директорий/файлов в один TXT (переиспользует tools.collect_context).
 
     project_type: auto | cs | py. Для auto тип определяется автоматически;
-    для cs/py все указанные директории считаются этого типа.
+    для cs/py все указанные пути считаются этого типа.
     local_prompt: локальный промпт пользователя — вставляется в начало сводного файла
     (поверх общего TDL-задания из prompts/general_task.txt).
     """
-    dirs = [d for d in (directories or []) if isinstance(d, str) and d.strip()]
+    paths = [p for p in (directories or []) if isinstance(p, str) and p.strip()]
     out_name = _safe_filename(filename)
     out = str(PROJECT_ROOT / "pipeline_output" / out_name)
     lg = get_logger()
 
-    if not dirs:
-        raise ValueError("Укажите хотя бы одну директорию.")
+    if not paths:
+        raise ValueError("Укажите хотя бы одну директорию или файл.")
 
-    for d in dirs:
-        p = Path(d)
-        if not p.is_dir():
-            raise ValueError(f"Директория не найдена: {d}")
+    missing = [p for p in paths if not Path(p).exists()]
+    if missing:
+        raise ValueError("Путь не найден: " + "; ".join(missing))
 
     project_types = None
     if project_type in ("cs", "py", "mixed"):
-        project_types = {str(Path(d).resolve()): project_type for d in dirs}
+        project_types = {str(Path(d).resolve()): project_type for d in paths}
 
-    lg.log(f"🖨️ Копирование в один файл: {len(dirs)} директорий, тип={project_type} → {out_name}")
+    lg.log(f"🖨️ Копирование в один файл: {len(paths)} путей, тип={project_type} → {out_name}")
     from tools.collect_context import collect_context
     res = collect_context(
-        dirs,
+        paths,
         output_file=out,
         project_types=project_types,
         add_task=True,
@@ -269,7 +275,7 @@ def collect_to_file(directories, project_type: str = "auto",
 
 def run_pipeline(pipeline: str, message: str,
                  directory: Optional[str] = None, new_chat: bool = False,
-                 project_type: str = "auto") -> dict:
+                 project_type: str = "auto", directories=None) -> dict:
     """Выполняет выбранный пайплайн (под session.lock)."""
     global session_message_count
     if new_chat:
@@ -280,7 +286,10 @@ def run_pipeline(pipeline: str, message: str,
     if pipeline == "merge":
         # message = локальный промпт пользователя (вставляется в начало сводного файла),
         # поверх общего TDL-задания из prompts/general_task.txt
-        content, out = _collect_context_to(directory or "", "ui_merged_context.txt",
+        paths = [p for p in (directories or []) if isinstance(p, str) and p.strip()]
+        if not paths and directory:
+            paths = [directory]
+        content, out = _collect_context_to(paths, "ui_merged_context.txt",
                                            local_prompt=message, project_type=project_type)
         from webui.prompts_db import get_prompt_for
         prompt = get_prompt_for("merge", stage) or get_prompt_for("merge", "both") or (
@@ -349,6 +358,163 @@ def api_credentials():
             "has_password": bool(os.environ.get("QWEN_PASSWORD")),
         },
     })
+
+
+# ---------------------------------------------------------------------------
+# Промпт-файлы из prompts/ (вкладка «Промпты», метаданные: наименование/описание/дата)
+# ---------------------------------------------------------------------------
+
+PROMPT_FILE_EXTS = (".txt", ".md", ".py", ".yaml", ".json")
+
+
+def _prompt_file_meta(path: Path) -> dict:
+    """Метаданные промпт-файла: наименование, описание, дата создания, размер."""
+    created = path.stat().st_ctime
+    modified = path.stat().st_mtime
+    try:
+        content = path.read_text(encoding="utf-8", errors="replace")
+    except Exception as e:
+        content = f"(ошибка чтения: {e})"
+    lines = content.splitlines()
+
+    # Наименование: первая строка-заголовок H1 (# Имя), иначе имя файла
+    name = path.name
+    for ln in lines[:8]:
+        s = ln.strip()
+        if s.startswith("# ") and not s.startswith("## "):
+            name = s.lstrip("#").strip()
+            break
+    # Описание: текст после заголовка до первой пустой строки (обрезка)
+    description = ""
+    capture = False
+    for ln in lines:
+        s = ln.strip()
+        if s.startswith("#"):
+            capture = True
+            continue
+        if capture:
+            if not s:
+                break
+            description = s[:160] if len(s) > 160 else s
+            break
+    if not description:
+        # fallback: первая непустая не-заголовочная строка
+        for ln in lines:
+            s = ln.strip()
+            if s and not s.startswith("#"):
+                description = s[:160]
+                break
+    return {
+        "file": path.name,
+        "path": str(path),
+        "name": name or path.stem,
+        "description": description,
+        "created_at": datetime.fromtimestamp(created).isoformat(timespec="seconds"),
+        "modified_at": datetime.fromtimestamp(modified).isoformat(timespec="seconds"),
+        "size": path.stat().st_size,
+    }
+
+
+@app.get("/api/prompt-files")
+def api_prompt_files():
+    """Список промпт-файлов из prompts/ с метаданными."""
+    files = []
+    if PROMPTS_DIR.exists():
+        for p in sorted(PROMPTS_DIR.iterdir()):
+            if p.is_file() and p.suffix.lower() in PROMPT_FILE_EXTS and not p.name.startswith("."):
+                try:
+                    files.append(_prompt_file_meta(p))
+                except Exception as e:
+                    files.append({"name": p.name, "path": str(p), "description": f"ошибка: {e}",
+                                  "created_at": "", "modified_at": "", "size": 0})
+    return _ok({"prompts_dir": str(PROMPTS_DIR), "files": files})
+
+
+@app.get("/api/prompt-file")
+def api_prompt_file_get(path: str = ""):
+    """Содержимое одного промпт-файла (по относительному пути в prompts/)."""
+    rel = _prompt_rel(path)
+    if not rel:
+        return _fail("Неверный путь к файлу.")
+    fp = (PROMPTS_DIR / rel).resolve()
+    if not str(fp.parent).startswith(str(PROMPTS_DIR.resolve())) or not fp.exists():
+        return _fail("Файл не найден: " + path, status=404)
+    try:
+        content = fp.read_text(encoding="utf-8", errors="replace")
+    except Exception as e:
+        return _fail(f"Ошибка чтения: {e}", status=500)
+    meta = _prompt_file_meta(fp)
+    return _ok({"name": meta["name"], "path": str(fp), "content": content})
+
+
+def _prompt_rel(path: str) -> str:
+    d = os.path.basename((path or "").replace("\\", "/").strip())
+    return d if d not in (".", "..") else ""
+
+
+def _prompt_fp(path: str):
+    """Безопасный путь к файлу в prompts/ (без обхода папки)."""
+    rel = _prompt_rel(path)
+    if not rel:
+        return None
+    fp = (PROMPTS_DIR / rel).resolve()
+    if not str(fp.parent).startswith(str(PROMPTS_DIR.resolve())):
+        return None
+    return fp
+
+
+@app.post("/api/prompt-file")
+def api_prompt_file_create(payload: dict):
+    """Создать новый промпт-файл в prompts/."""
+    name = str(payload.get("name", "")).strip()
+    content = str(payload.get("content", ""))
+    if not name or name in (".", ".."):
+        return _fail("Укажите имя файла.")
+    ext = Path(name).suffix.lower()
+    if ext not in PROMPT_FILE_EXTS:
+        name += ".txt"
+    fp = _prompt_fp(name)
+    if not fp:
+        return _fail("Недопустимое имя файла.")
+    PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
+    if fp.exists():
+        return _fail("Файл уже существует: " + fp.name)
+    try:
+        fp.write_text(content, encoding="utf-8")
+    except Exception as e:
+        return _fail(f"Ошибка записи: {e}", status=500)
+    return _ok({"file": _prompt_file_meta(fp)})
+
+
+@app.put("/api/prompt-file")
+def api_prompt_file_save(path: str = "", payload: dict = None):
+    """Перезаписать содержимое промпт-файла."""
+    payload = payload or {}
+    fp = _prompt_fp(path)
+    if not fp:
+        return _fail("Неверный путь к файлу.")
+    if not fp.exists():
+        return _fail("Файл не найден: " + fp.name, status=404)
+    try:
+        fp.write_text(str(payload.get("content", "")), encoding="utf-8")
+    except Exception as e:
+        return _fail(f"Ошибка записи: {e}", status=500)
+    return _ok({"file": _prompt_file_meta(fp)})
+
+
+@app.delete("/api/prompt-file")
+def api_prompt_file_delete(path: str = ""):
+    """Удалить промпт-файл из prompts/."""
+    fp = _prompt_fp(path)
+    if not fp:
+        return _fail("Неверный путь к файлу.")
+    if not fp.exists():
+        return _fail("Файл не найден: " + fp.name, status=404)
+    try:
+        fp.unlink()
+    except Exception as e:
+        return _fail(f"Ошибка удаления: {e}", status=500)
+    return _ok({"deleted": fp.name})
 
 
 # ---------------------------------------------------------------------------
@@ -574,6 +740,7 @@ def api_run(payload: dict):
     pipeline = payload.get("pipeline", "qa")
     message = (payload.get("message") or "").strip()
     directory = payload.get("directory") or None
+    directories = payload.get("directories") or None
     new_chat = bool(payload.get("new_chat", False))
     project_type = payload.get("project_type", "auto")
     if pipeline not in PIPELINES:
@@ -583,7 +750,7 @@ def api_run(payload: dict):
     try:
         with session.lock:
             return _ok(run_pipeline(pipeline, message, directory=directory, new_chat=new_chat,
-                                    project_type=project_type))
+                                    project_type=project_type, directories=directories))
     except RuntimeError as e:
         return _fail(str(e))
     except Exception as e:
@@ -636,6 +803,19 @@ def api_file(name: str = "cloud_context.txt"):
 @app.get("/")
 def index():
     return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.middleware("http")
+async def no_cache_for_ui(request, call_next):
+    """Отключает HTTP-кэширование для UI (html/js/css), чтобы правки сразу виделись."""
+    path = request.url.path
+    is_ui = path == "/" or path.startswith("/static/")
+    response = await call_next(request)
+    if is_ui:
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

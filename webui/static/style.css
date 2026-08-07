@@ -72,6 +72,7 @@ textarea#qaPrompt, textarea#mergePrompt {
   font-size: 14px;
   line-height: 1.5;
 }
+textarea#mergePrompt { min-height: 480px; }
 label:has(textarea) { display: block; width: 100%; }
 
 .btn {
@@ -219,6 +220,124 @@ label:has(textarea) { display: block; width: 100%; }
 .modal-body {
   padding: 20px;
   overflow-y: auto;
+}
+
+/* Модальное окно промпта: шире, редактор + предпросмотр */
+.modal-content.prompt-modal {
+  width: 92vw;
+  max-width: 1500px;
+  max-height: 92vh;
+  resize: both;
+  overflow: auto;
+}
+.modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#btnMaximizePrompt {
+  min-width: 0;
+}
+.prompt-modal.maximized {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none;
+  max-height: none;
+  border-radius: 0;
+  border: none;
+}
+.prompt-modal.maximized .modal-body {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.prompt-modal.maximized .pm-grid {
+  flex: 1;
+  min-height: 0;
+}
+.prompt-modal.maximized .pm-grid textarea,
+.prompt-modal.maximized .pm-preview {
+  height: 100%;
+}
+.prompt-modal.maximized .pm-preview {
+  max-height: none;
+}
+.pm-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.pm-viewswitch {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.pm-viewswitch button.active {
+  background: rgba(79, 140, 255, 0.18);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.pm-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.pm-grid[data-view="preview"] { grid-template-columns: 1fr; }
+.pm-grid[data-view="preview"] textarea { display: none; }
+.pm-grid[data-view="code"] { grid-template-columns: 1fr; }
+.pm-grid[data-view="code"] .pm-preview { display: none; }
+.pm-grid textarea {
+  margin-bottom: 0;
+  min-height: 340px;
+}
+.pm-preview {
+  min-height: 340px;
+  max-height: 60vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: var(--bg);
+}
+.modal-footer {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+@media (max-width: 860px) {
+  .pm-grid { grid-template-columns: 1fr; }
+}
+
+/* Карточка промпта сводного файла (вместо textarea) */
+.merge-prompt-card {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  background: var(--bg);
+  transition: border-color 0.15s;
+}
+.merge-prompt-card:hover { border-color: var(--accent); }
+.merge-prompt-card .mpc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text);
+}
+.merge-prompt-card .mpc-empty {
+  color: var(--muted);
+  font-size: 13px;
+}
+.merge-prompt-card .mpc-body {
+  max-height: 220px;
+  overflow: auto;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .help-item {
@@ -401,3 +520,107 @@ main { flex: 1; min-width: 0; padding: 20px 16px 60px; display: flex; flex-direc
   cursor: pointer;
 }
 .btn-mini:hover { border-color: var(--accent); }
+
+/* ================== Промпты: табы и таблицы ================== */
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.card-head h2 { margin: 0; }
+.head-actions { display: flex; gap: 8px; }
+
+.prompt-tabs, .prompt-tabs-inner {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+.prompt-tabs-inner { border: none; padding: 0; }
+
+.ptab {
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+.ptab:hover { border-color: var(--accent); color: var(--text); }
+.ptab.active { background: rgba(79, 140, 255, 0.15); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+.prompt-table td .sub { font-size: 11px; color: var(--muted); font-weight: 400; }
+.prompt-table td.num { text-align: right; white-space: nowrap; }
+.prompt-table tr { cursor: pointer; }
+.prompt-table tr:hover { background: rgba(79, 140, 255, 0.06); }
+.prompt-table tr.sel { background: rgba(79, 140, 255, 0.14); }
+.prompt-table .actions { display: flex; gap: 4px; }
+
+/* ================== Markdown-тело ================== */
+.md-body { font-family: "Segoe UI", system-ui, sans-serif; }
+.md-body pre.code {
+  background: #0b0d12;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  overflow: auto;
+  font-family: Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.md-body pre.code code { font-family: inherit; background: none; padding: 0; }
+.md-body code {
+  background: rgba(79, 140, 255, 0.12);
+  border: 1px solid rgba(79, 140, 255, 0.25);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: Consolas, monospace;
+  font-size: 12px;
+}
+.md-body h1, .md-body h2, .md-body h3, .md-body h4 {
+  margin: 14px 0 6px;
+  color: var(--text);
+  line-height: 1.3;
+}
+.md-body h1 { font-size: 19px; }
+.md-body h2 { font-size: 16px; }
+.md-body h3 { font-size: 14px; }
+.md-body h4 { font-size: 13px; }
+.md-body p { margin: 6px 0; }
+.md-body ul, .md-body ol { margin: 6px 0 6px 20px; padding: 0; }
+.md-body li { margin: 3px 0; }
+.md-body blockquote {
+  margin: 8px 0;
+  padding: 6px 12px;
+  border-left: 3px solid var(--accent);
+  background: rgba(79, 140, 255, 0.08);
+  border-radius: 0 6px 6px 0;
+}
+.md-body blockquote p { margin: 0; }
+.md-body table { border-collapse: collapse; margin: 8px 0; font-size: 12.5px; max-width: 100%; }
+.md-body th, .md-body td { border: 1px solid var(--border); padding: 5px 10px; text-align: left; }
+.md-body th { background: var(--bg); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
+.md-body hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+.md-body a { color: var(--accent); }
+.md-body strong { color: #fff; }
+
+/* ================== Тост ================== */
+.toast {
+  position: fixed;
+  top: 64px;
+  right: 20px;
+  z-index: 1001;
+  max-width: 420px;
+  padding: 10px 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+}
+
+.pull-right { margin-left: auto; }
+.row .pull-right { margin-left: auto; }

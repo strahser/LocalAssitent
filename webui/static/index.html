@@ -20,6 +20,8 @@
   </div>
 </header>
 
+<div id="toastMsg" class="toast hidden"></div>
+
 <!-- Коннект-бар -->
 <div class="connectbar">
   <label>Провайдер:
@@ -43,10 +45,11 @@
 </div>
 
 <div class="layout">
-  <!-- Вертикальное меню (два режима) -->
+  <!-- Вертикальное меню -->
   <nav class="sidenav">
     <button class="nav-btn active" data-view="chat">💬 Вопрос — ответ</button>
     <button class="nav-btn" data-view="merge">📄 Сводный файл</button>
+    <button class="nav-btn" data-view="prompts">📚 Промпты</button>
     <button class="nav-btn" data-view="logs">📜 Журнал</button>
   </nav>
 
@@ -61,7 +64,7 @@
         </p>
 
         <div class="row">
-          <label>Общий промпт (по умолчанию — «ответь подробно в формате вопрос/ответ»):</label>
+          <label>Общий промпт (пусто = по умолчанию):</label>
         </div>
         <textarea id="qaPrompt" rows="6"
           placeholder="Ответь на вопросы в формате «Вопрос: ... / Ответ: ...». Отвечай подробно."></textarea>
@@ -71,10 +74,10 @@
             <input id="qaInputFile" type="text" placeholder="C:\путь\вопросы.txt">
           </label>
           <label>Выходной файл (куда записать ответы):
-            <input id="qaOutputFile" type="text" placeholder="C:\путь\ответы.md">
+            <input id="qaOutputFile" type="text" placeholder="пусто = pipeline_output/qa_answers.md">
           </label>
           <label class="chk">
-            <input id="qaNewChat" type="checkbox"> Новый чат
+            <input id="qaNewChat" type="checkbox" checked> Новый чат
           </label>
         </div>
 
@@ -93,15 +96,17 @@
     <!-- ============ СВОДНЫЙ ФАЙЛ (merge) ============ -->
     <section id="view-merge" class="view hidden">
       <div class="card">
-        <h2>📄 Формирование сводного файла + отправка</h2>
+        <h2>📄 Сводный файл (контекст проекта)</h2>
         <p class="hint">
-          Собирает файлы директории в один сводный файл. В начале — локальный промпт
-          пользователя (вставьте или выберите из базы промптов), затем — общее TDL-задание.
+          Собирает файлы проекта в один сводный файл. Можно указать несколько путей —
+          директории и/или отдельные файлы (по одной строке на путь).
+          В начало добавляется локальный промпт, затем общее TDL-задание.
         </p>
+        <label>Пути (директории или файлы, по одному на строку):
+          <textarea id="mergeDirs" rows="5"
+            placeholder="d:/Projects/ProjectA&#10;d:/Projects/ProjectB/src/app.py&#10;d:/Projects/ProjectB/config.py"></textarea>
+        </label>
         <div class="row">
-          <label>Директория (проект):
-            <input id="mergeDir" type="text" placeholder="пусто = проект LocalAssitent">
-          </label>
           <label>Тип файлов:
             <select id="mergeType">
               <option value="auto">Авто (определить)</option>
@@ -114,31 +119,70 @@
             <input id="mergeFilename" type="text" value="cloud_context.txt">
           </label>
           <label class="chk">
-            <input id="mergeNewChat" type="checkbox"> Новый чат
+            <input id="mergeNewChat" type="checkbox" checked> Новый чат
           </label>
         </div>
 
-        <label>Локальный промпт пользователя (вставляется в начало сводного файла):
-          <textarea id="mergePrompt" rows="14"
-            placeholder="Ваш промпт для ИИ (что сделать с кодом проекта)..."></textarea>
-        </label>
         <div class="row">
-          <label>Из базы промптов:
-            <select id="promptSelect"></select>
-          </label>
           <button id="btnUsePrompt" class="btn btn-ghost" type="button">📋 Вставить в окно</button>
           <button id="btnResetPrompt" class="btn btn-ghost" type="button">↺ По умолчанию (TDL)</button>
-        </div>
-
-        <div class="row">
           <button id="btnMergeSend" class="btn btn-primary">🚀 Собрать + отправить в ИИ</button>
           <button id="btnMergeOnly" class="btn btn-ghost">📄 Только собрать файл</button>
           <button id="btnCopyMerge" class="btn btn-ghost">📋 Копировать ответ</button>
+          <label class="chk pull-right">
+            <input type="checkbox" id="mdToggle" checked> Markdown-рендер
+          </label>
         </div>
+
+        <div class="merge-prompt-wrap">
+          <div class="mpw-label">Локальный промпт пользователя (вставляется в начало сводного файла)</div>
+          <div id="mergePromptCard" class="merge-prompt-card" title="Просмотр / редактирование промпта">
+            <div class="mpc-head">📝 Промпт для ИИ <span class="mpc-hint">— нажмите, чтобы открыть</span></div>
+            <div id="mergePromptEmpty" class="mpc-empty">Промпт не задан. Нажмите, чтобы просмотреть/редактировать окно.</div>
+            <div id="mergePromptPreview" class="mpc-body" style="display:none;"></div>
+          </div>
+          <textarea id="mergePrompt" class="hidden" rows="2"></textarea>
+        </div>
+
         <div id="busyMerge" class="busy hidden">⏳ Работаю... облачный чат может отвечать 1–5 минут</div>
         <div id="noteMerge" class="note"></div>
         <div id="mergeResult" class="collect-result"></div>
-        <div id="output" class="output tall"></div>
+        <div id="output" class="output tall md-body"></div>
+      </div>
+    </section>
+
+    <!-- ============ ПРОМПТЫ ============ -->
+    <section id="view-prompts" class="view hidden">
+      <div class="card">
+        <div class="card-head">
+          <h2>📚 Промпты</h2>
+          <div class="head-actions">
+            <button id="btnPromptNew" class="btn btn-ghost" type="button">➕ Новый промпт</button>
+            <button id="btnPromptView" class="btn btn-ghost" type="button">👁️ Просмотреть</button>
+            <button id="btnPromptLoadMerge" class="btn btn-ghost" type="button">📄 → В сводный файл</button>
+            <button id="btnPromptRefresh" class="btn btn-ghost" type="button">🔄 Обновить</button>
+          </div>
+        </div>
+        <p class="hint" id="promptsDirHint"></p>
+
+        <!-- Файлы в prompts/ -->
+        <div id="ptab-files">
+          <div class="prompt-list">
+            <table class="prompt-table">
+              <thead>
+                <tr>
+                  <th>Наименование</th>
+                  <th>Описание</th>
+                  <th>Дата создания</th>
+                  <th>Изменён</th>
+                  <th>Размер</th>
+                  <th>Действия</th>
+                </tr>
+              </thead>
+              <tbody id="promptFilesBody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -161,17 +205,72 @@
     </div>
     <div class="modal-body">
       <div class="help-item">
-        <h4>💬 Вопрос — ответ (автоконвейер)</h4>
-        <p>Общий промпт (можно не заполнять — будет по умолчанию «ответь подробно в формате вопрос/ответ»).
-           Файл с вопросами — по одному вопросу на строку. Конвейер отправляет каждый вопрос в ИИ,
-           собирает историю и записывает ответы в выходной файл.</p>
+        <h4>📄 Сводный файл</h4>
+        <p>В поле «Пути» перечислите по одной строке директории и/или файлы. Директории
+           собираются по типу проекта (авто / C# / Python / смешанные), отдельные файлы
+           включаются как есть (кроме временных и > 100 КБ). «Собрать + отправить» —
+           соберёт и отправит в ИИ; «Только собрать файл» — сохранит сводный файл.</p>
       </div>
       <div class="help-item">
-        <h4>📄 Сводный файл</h4>
-        <p>Собирает файлы проекта в один контекст. В начале — локальный промпт пользователя
-           (вставьте в окно или выберите из базы), затем общее TDL-задание.
-           «Собрать + отправить» — соберёт и отправит в ИИ; «Только собрать файл» — сохранит
-           сводный файл без отправки.</p>
+        <h4>📚 Промпты</h4>
+        <p>Вкладка показывает все промпты из папки <code>prompts/</code> (с наименованием,
+           описанием и датой создания) и промпты из SQLite-базы. Нажмите на строку файла —
+           содержимое откроется в текстовом поле. Кнопка «→ в сводный файл» вставит текущий
+           промпт в окно «Локальный промпт».</p>
+      </div>
+      <div class="help-item">
+        <h4>💬 Вопрос — ответ (автоконвейер)</h4>
+        <p>Общий промпт (можно не заполнять). Файл с вопросами — по одному на строку.
+           Конвейер отправляет каждый вопрос в ИИ и записывает ответы в выходной файл.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Модальное окно промпта (создание / редактирование / просмотр) -->
+<div id="promptModal" class="modal hidden">
+  <div class="modal-content prompt-modal">
+    <div class="modal-header">
+      <h3 id="promptModalTitle">Промпт</h3>
+      <div class="modal-header-actions">
+        <button id="btnMaximizePrompt" class="btn-mini" type="button" title="Развернуть на весь экран">⛶</button>
+        <button id="btnClosePrompt" class="modal-close" type="button" title="Закрыть">&times;</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="row" id="pmNameRow">
+        <label>Имя файла (prompts/):
+          <input id="pmName" type="text" placeholder="my_prompt.txt">
+        </label>
+      </div>
+      <div class="pm-viewswitch">
+        <button type="button" class="btn-mini" data-pmview="preview">👁️ Просмотр</button>
+        <button type="button" class="btn-mini" data-pmview="both">▤ Оба окна</button>
+        <button type="button" class="btn-mini" data-pmview="code">📝 Код</button>
+      </div>
+      <div class="pm-toolbar">
+        <button class="btn-mini" data-before="**" data-after="**" title="Жирный"><b>B</b></button>
+        <button class="btn-mini" data-before="*" data-after="*" title="Курсив"><i>I</i></button>
+        <button class="btn-mini" data-before="## " data-after="" title="Заголовок 2">H2</button>
+        <button class="btn-mini" data-before="### " data-after="" title="Заголовок 3">H3</button>
+        <button class="btn-mini" data-before="#### " data-after="" title="Заголовок 4">H4</button>
+        <button class="btn-mini" data-before="- " data-after="" title="Маркированный список">• Список</button>
+        <button class="btn-mini" data-before="1. " data-after="" title="Нумерованный список">1. Список</button>
+        <button class="btn-mini" data-before="> " data-after="" title="Цитата">❝ Цитата</button>
+        <button class="btn-mini" data-before="`" data-after="`" title="Код в строке">&lt;code&gt;</button>
+        <button class="btn-mini" data-before="&#10;```&#10;" data-after="&#10;```" title="Блок кода">``` блок</button>
+        <button class="btn-mini" data-before="| Поле | Значение |&#10;|---|---|&#10;| " data-after=" |" title="Таблица">▦ Таблица</button>
+        <button class="btn-mini" data-before="[текст](https://)" data-after="" title="Ссылка">🔗 Ссылка</button>
+        <button class="btn-mini" data-before="&#10;---&#10;" data-after="" title="Разделитель">———</button>
+      </div>
+      <div class="pm-grid" id="pmGrid">
+        <textarea id="pmContent" rows="18"
+          placeholder="Содержимое промпта (Markdown/HTML). Справа — живой предпросмотр..."></textarea>
+        <div id="pmPreview" class="md-body pm-preview">Введите текст — предпросмотр появится здесь.</div>
+      </div>
+      <div class="row modal-footer">
+        <button id="btnPromptSave" class="btn btn-primary" type="button">💾 Сохранить</button>
+        <button id="btnPromptCloseFooter" class="btn btn-ghost" type="button">Закрыть</button>
       </div>
     </div>
   </div>
