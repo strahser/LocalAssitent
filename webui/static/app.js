@@ -30,12 +30,12 @@ function setBusyMerge(busy) {
 
 /* ================== Навигация (две вкладки) ================== */
 const NAV = ['chat', 'merge', 'logs'];
-function switchView(view) {
+async function switchView(view) {
   NAV.forEach((v) => $('view-' + v).classList.toggle('hidden', v !== view));
   document.querySelectorAll('.nav-btn').forEach((b) => {
     b.classList.toggle('active', b.dataset.view === view);
   });
-  if (view === 'merge') { refreshMergePrompts(); ensureDefaultPrompt(); }
+  if (view === 'merge') { await refreshMergePrompts(); ensureDefaultPrompt(); }
   if (view === 'logs') refreshLogs();
 }
 document.querySelectorAll('.nav-btn').forEach((btn) => {
@@ -212,6 +212,7 @@ async function mergeSend() {
     message: localPrompt,
     directory: dir || undefined,
     filename,
+    project_type: $('mergeType').value || 'auto',
     new_chat: $('mergeNewChat').checked,
   };
   const d = await api('/api/run', body);
@@ -241,7 +242,7 @@ async function mergeOnly() {
   setBusyMerge(true);
   const body = {
     directories: dirs,
-    project_type: 'auto',
+    project_type: $('mergeType').value || 'auto',
     filename: $('mergeFilename').value.trim() || 'cloud_context.txt',
     local_prompt: localPrompt,
   };

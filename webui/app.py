@@ -191,16 +191,20 @@ def _pipeline_message(pipeline: str, message: str, stage: str = "both") -> str:
     return message
 
 
-def _collect_context_to(directory: str, out_name: str, local_prompt: str = "") -> str:
+def _collect_context_to(directory: str, out_name: str, local_prompt: str = "",
+                        project_type: str = "auto") -> str:
     """Собирает контекст директории через tools.collect_context, возвращает содержимое."""
     from tools.collect_context import collect_context
 
     d = directory or str(PROJECT_ROOT)
     out = str(PROJECT_ROOT / "pipeline_output" / out_name)
     lg = get_logger()
-    lg.log(f"📦 Сбор контекста из: {d}")
+    lg.log(f"📦 Сбор контекста из: {d} (тип={project_type})")
+    ptypes = None
+    if project_type in ("cs", "py", "mixed"):
+        ptypes = {str(Path(d).resolve()): project_type}
     res = collect_context([d], output_file=out, add_task=True, add_summary=True,
-                          local_prompt=local_prompt)
+                          local_prompt=local_prompt, project_types=ptypes)
     lg.log(f"📦 {res}")
     content = Path(out).read_text(encoding="utf-8", errors="replace")
     lg.log(f"📦 Размер контекста: {len(content)} символов")
@@ -264,7 +268,8 @@ def collect_to_file(directories, project_type: str = "auto",
 
 
 def run_pipeline(pipeline: str, message: str,
-                 directory: Optional[str] = None, new_chat: bool = False) -> dict:
+                 directory: Optional[str] = None, new_chat: bool = False,
+                 project_type: str = "auto") -> dict:
     """Выполняет выбранный пайплайн (под session.lock)."""
     global session_message_count
     if new_chat:
@@ -276,7 +281,7 @@ def run_pipeline(pipeline: str, message: str,
         # message = локальный промпт пользователя (вставляется в начало сводного файла),
         # поверх общего TDL-задания из prompts/general_task.txt
         content, out = _collect_context_to(directory or "", "ui_merged_context.txt",
-                                           local_prompt=message)
+                                           local_prompt=message, project_type=project_type)
         from webui.prompts_db import get_prompt_for
         prompt = get_prompt_for("merge", stage) or get_prompt_for("merge", "both") or (
             "Выполни локальный промпт пользователя, соблюдая формат ответа из "
@@ -570,13 +575,15 @@ def api_run(payload: dict):
     message = (payload.get("message") or "").strip()
     directory = payload.get("directory") or None
     new_chat = bool(payload.get("new_chat", False))
+    project_type = payload.get("project_type", "auto")
     if pipeline not in PIPELINES:
         return _fail(f"Неизвестный пайплайн '{pipeline}'. Доступны: {', '.join(PIPELINES)}")
     if not message:
         return _fail("Пустое сообщение/задача.")
     try:
         with session.lock:
-            return _ok(run_pipeline(pipeline, message, directory=directory, new_chat=new_chat))
+            return _ok(run_pipeline(pipeline, message, directory=directory, new_chat=new_chat,
+                                    project_type=project_type))
     except RuntimeError as e:
         return _fail(str(e))
     except Exception as e:
@@ -637,5 +644,5 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 if __name__ == "__main__":
     import uvicorn
 
-    print("🌐 LocalAssitent UI: http://127.0.0.1:8000/")
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
+    print("🌐 LocalAssitent UI: http://127.0.0.1:8081/")
+    uvicorn.run(app, host="127.0.0.1", port=8081, log_level="info")

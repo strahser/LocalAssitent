@@ -16,7 +16,7 @@ import uvicorn
 def main():
     ap = argparse.ArgumentParser(description="LocalAssitent Web UI (FastAPI)")
     ap.add_argument("--host", default="127.0.0.1", help="Хост (по умолчанию 127.0.0.1)")
-    ap.add_argument("--port", type=int, default=8080, help="Порт (по умолчанию 8080)")
+    ap.add_argument("--port", type=int, default=8081, help="Порт (по умолчанию 8081; 8080 занят OpenWebUI)")
     ap.add_argument("--no-browser", action="store_true", help="Не открывать браузер автоматически")
     args = ap.parse_args()
 
