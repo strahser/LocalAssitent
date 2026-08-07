@@ -66,6 +66,12 @@ input, select, textarea {
 }
 input, select { min-width: 180px; }
 textarea { width: 100%; resize: vertical; margin-bottom: 10px; font-family: Consolas, monospace; min-width: 0; }
+/* Увеличиваем textarea (общий промпт Q&A, локальный промпт сводного файла) */
+textarea#qaPrompt, textarea#mergePrompt {
+  min-height: 240px;
+  font-size: 14px;
+  line-height: 1.5;
+}
 label:has(textarea) { display: block; width: 100%; }
 
 .btn {
@@ -112,6 +118,7 @@ label:has(textarea) { display: block; width: 100%; }
   overflow: auto;
   line-height: 1.5;
 }
+.output.tall { max-height: calc(100vh - 380px); min-height: 40vh; }
 
 .logs {
   background: #0b0d12;
@@ -295,6 +302,11 @@ main { flex: 1; min-width: 0; padding: 20px 16px 60px; display: flex; flex-direc
   max-height: 480px;
   overflow-y: auto;
   padding: 6px 2px;
+}
+/* История чата — почти на весь экран */
+.chat-log.tall {
+  max-height: calc(100vh - 420px);
+  min-height: 50vh;
 }
 .chat-pair {
   display: flex;

@@ -20,7 +20,7 @@
   </div>
 </header>
 
-<!-- Коннект-бар (горизонтальное меню сверху) -->
+<!-- Коннект-бар -->
 <div class="connectbar">
   <label>Провайдер:
     <select id="provider">
@@ -43,7 +43,7 @@
 </div>
 
 <div class="layout">
-  <!-- Вертикальное меню слева (два режима) -->
+  <!-- Вертикальное меню (два режима) -->
   <nav class="sidenav">
     <button class="nav-btn active" data-view="chat">💬 Вопрос — ответ</button>
     <button class="nav-btn" data-view="merge">📄 Сводный файл</button>
@@ -51,23 +51,42 @@
   </nav>
 
   <main>
-    <!-- ============ ВОПРОС — ОТВЕТ ============ -->
+    <!-- ============ ВОПРОС — ОТВЕТ (автоматический конвейер) ============ -->
     <section id="view-chat" class="view">
       <div class="card">
-        <h2>💬 Вопрос — ответ</h2>
-        <div id="chatLog" class="chat-log"></div>
-        <div class="chat-input-row">
-          <label class="chk">
-            <input id="newChatChat" type="checkbox"> Новый чат
-          </label>
-          <textarea id="message" rows="3" placeholder="Вопрос или задача для облачного ИИ..."></textarea>
-        </div>
+        <h2>💬 Вопрос — ответ (автоматический конвейер по файлу)</h2>
+        <p class="hint">
+          Общий промпт → файл с вопросами (по одному на строку) → построчная отправка в ИИ →
+          ответы записываются в выходной файл. История переписки — ниже.
+        </p>
+
         <div class="row">
-          <button id="btnSend" class="btn btn-primary">🚀 Отправить</button>
-          <button id="btnCopy" class="btn btn-ghost">📋 Копировать ответ</button>
+          <label>Общий промпт (по умолчанию — «ответь подробно в формате вопрос/ответ»):</label>
         </div>
-        <div id="busy" class="busy hidden">⏳ Работаю... облачный чат может отвечать 1–5 минут</div>
-        <div id="note" class="note"></div>
+        <textarea id="qaPrompt" rows="6"
+          placeholder="Ответь на вопросы в формате «Вопрос: ... / Ответ: ...». Отвечай подробно."></textarea>
+
+        <div class="row">
+          <label>Файл с вопросами (путь, по одному вопросу на строку):
+            <input id="qaInputFile" type="text" placeholder="C:\путь\вопросы.txt">
+          </label>
+          <label>Выходной файл (куда записать ответы):
+            <input id="qaOutputFile" type="text" placeholder="C:\путь\ответы.md">
+          </label>
+          <label class="chk">
+            <input id="qaNewChat" type="checkbox"> Новый чат
+          </label>
+        </div>
+
+        <div class="row">
+          <button id="btnQaRun" class="btn btn-primary">🚀 Запустить конвейер</button>
+          <button id="btnQaCopy" class="btn btn-ghost">📋 Копировать историю</button>
+        </div>
+        <div id="busyQa" class="busy hidden">⏳ Работаю... отправляю вопросы по одному, может занять время</div>
+        <div id="noteQa" class="note"></div>
+
+        <!-- История чата (вопрос-ответ) -->
+        <div id="qaHistory" class="chat-log tall"></div>
       </div>
     </section>
 
@@ -76,9 +95,8 @@
       <div class="card">
         <h2>📄 Формирование сводного файла + отправка</h2>
         <p class="hint">
-          Собирает файлы директории в один сводный файл. В начале файла — локальный промпт
-          пользователя (вставьте или выберите из базы промптов), затем — общее TDL-задание
-          (структура «задача → отчёт → вердикт», доказательства обязательны).
+          Собирает файлы директории в один сводный файл. В начале — локальный промпт
+          пользователя (вставьте или выберите из базы промптов), затем — общее TDL-задание.
         </p>
         <div class="row">
           <label>Директория (проект):
@@ -92,9 +110,8 @@
           </label>
         </div>
 
-        <!-- Окно локального промпта + кнопка из базы -->
         <label>Локальный промпт пользователя (вставляется в начало сводного файла):
-          <textarea id="mergePrompt" rows="6"
+          <textarea id="mergePrompt" rows="14"
             placeholder="Ваш промпт для ИИ (что сделать с кодом проекта)..."></textarea>
         </label>
         <div class="row">
@@ -113,7 +130,7 @@
         <div id="busyMerge" class="busy hidden">⏳ Работаю... облачный чат может отвечать 1–5 минут</div>
         <div id="noteMerge" class="note"></div>
         <div id="mergeResult" class="collect-result"></div>
-        <div id="output" class="output">—</div>
+        <div id="output" class="output tall"></div>
       </div>
     </section>
 
@@ -121,7 +138,7 @@
     <section id="view-logs" class="view hidden">
       <div class="card">
         <h2>📜 Журнал (ui.log)</h2>
-        <pre id="logs" class="logs">…</pre>
+        <pre id="logs" class="logs tall">…</pre>
       </div>
     </section>
   </main>
@@ -136,15 +153,17 @@
     </div>
     <div class="modal-body">
       <div class="help-item">
-        <h4>💬 Вопрос — ответ (Q&A)</h4>
-        <p>Простой диалог с облачным ИИ. Отправьте вопрос — получите текстовый ответ.</p>
+        <h4>💬 Вопрос — ответ (автоконвейер)</h4>
+        <p>Общий промпт (можно не заполнять — будет по умолчанию «ответь подробно в формате вопрос/ответ»).
+           Файл с вопросами — по одному вопросу на строку. Конвейер отправляет каждый вопрос в ИИ,
+           собирает историю и записывает ответы в выходной файл.</p>
       </div>
       <div class="help-item">
         <h4>📄 Сводный файл</h4>
         <p>Собирает файлы проекта в один контекст. В начале — локальный промпт пользователя
-           (вставьте в окно или выберите из базы промптов), затем общее TDL-задание.
+           (вставьте в окно или выберите из базы), затем общее TDL-задание.
            «Собрать + отправить» — соберёт и отправит в ИИ; «Только собрать файл» — сохранит
-           сводный файл для скачивания без отправки.</p>
+           сводный файл без отправки.</p>
       </div>
     </div>
   </div>

@@ -479,6 +479,89 @@ def api_chat(payload: dict):
         return _fail(f"Ошибка отправки: {e}", status=500)
 
 
+@app.post("/api/qa-file")
+def api_qa_file(payload: dict):
+    """Построчный конвейер «вопрос—ответ»:
+    общий промпт + файл с вопросами (по одному на строку) →
+    для каждой строки отправка в ИИ → ответы → запись в выходной файл.
+
+    payload: { prompt, input_file, output_file, new_chat }
+    Возвращает { ok, history: [{q, a}], output_file, total }
+    """
+    payload = payload or {}
+    prompt = (payload.get("prompt") or "").strip()
+    input_file = (payload.get("input_file") or "").strip()
+    output_file = (payload.get("output_file") or "").strip()
+    new_chat = bool(payload.get("new_chat", False))
+    if session.client is None:
+        return _fail("Не подключено к браузеру. Нажмите «Подключиться к браузеру».")
+    if not prompt:
+        prompt = "Ответь на вопросы в формате «Вопрос: ... / Ответ: ...». Отвечай подробно."
+    if not input_file:
+        return _fail("Укажите путь к файлу с вопросами (input_file).")
+    in_path = Path(input_file)
+    if not in_path.exists():
+        return _fail(f"Файл с вопросами не найден: {input_file}")
+    if not output_file:
+        output_file = str(PROJECT_ROOT / "pipeline_output" / "qa_answers.md")
+    out_path = Path(output_file)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with session.lock:
+            # новый чат: первое сообщение = общий промпт (контекст)
+            if new_chat:
+                session_message_count = 0
+                try:
+                    session.client.new_chat()
+                except Exception as e:
+                    get_logger().log(f"⚠️ new_chat: {e}", "WARNING")
+                time.sleep(1.5)
+            # читаем вопросы построчно
+            questions = [ln.strip() for ln in in_path.read_text(encoding="utf-8", errors="replace").splitlines() if ln.strip()]
+            if not questions:
+                return _fail("Файл с вопросами пуст.")
+            lg = get_logger()
+            lg.log(f"❓ Q&A-конвейер: {len(questions)} вопросов, промпт='{prompt[:60]}...'")
+            history = []
+            # если это первый запрос сессии — отправляем общий промпт как контекст
+            if session_message_count == 0:
+                ctx = session.client.send_prompt(prompt)
+                session_message_count += 1
+                lg.log(f"🧠 Контекст отправлен ({len(ctx or '')} символов)")
+            # по одному вопросу
+            for i, q in enumerate(questions, 1):
+                msg = f"{prompt}\n\n**Вопрос {i}:** {q}"
+                if i == 1 and session_message_count == 0:
+                    result = session.client.send_prompt(msg)
+                else:
+                    result = session.client.send_prompt(msg)
+                session_message_count += 1
+                answer = (result or "(пустой ответ)") if result is not None else "(ответ не получен)"
+                history.append({"q": q, "a": answer})
+                lg.log(f"❓ Вопрос {i}/{len(questions)}: {q[:50]} → ответ {len(answer)} символов")
+            # пишем в файл
+            lines = []
+            for it in history:
+                lines.append(f"**Вопрос:** {it['q']}\n\n**Ответ:** {it['a']}\n\n---\n")
+            out_path.write_text("\n".join(lines), encoding="utf-8")
+            lg.log(f"💾 Ответы сохранены: {out_path} ({len(history)} шт.)")
+            return _ok({"history": history, "output_file": str(out_path),
+                        "total": len(history), "download_url": f"/api/qa-file-download?name={out_path.name}"})
+    except RuntimeError as e:
+        return _fail(str(e))
+    except Exception as e:
+        return _fail(f"Ошибка Q&A-конвейера: {e}", status=500)
+
+
+@app.get("/api/qa-file-download")
+def api_qa_file_download(name: str = "qa_answers.md"):
+    """Скачать файл с ответами Q&A из pipeline_output."""
+    out = Path(PROJECT_ROOT / "pipeline_output") / _safe_filename(name)
+    if not out.exists():
+        return _fail(f"Файл не найден: {name}", status=404)
+    return FileResponse(out, media_type="text/plain; charset=utf-8", filename=out.name)
+
+
 @app.post("/api/run")
 def api_run(payload: dict):
     """Запуск выбранного пайплайна."""

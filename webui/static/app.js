@@ -258,6 +258,43 @@ async function mergeOnly() {
   setBusyMerge(false);
 }
 
+/* ================== Q&A: автоматический конвейер по файлу ================== */
+function setBusyQa(busy) {
+  $('busyQa').classList.toggle('hidden', !busy);
+  $('btnQaRun').disabled = busy;
+}
+
+async function qaRun() {
+  const prompt = $('qaPrompt').value.trim();
+  const inputFile = $('qaInputFile').value.trim();
+  const outputFile = $('qaOutputFile').value.trim();
+  if (!inputFile) { showNote($('noteQa'), 'Укажите файл с вопросами (input_file).', true); return; }
+  setBusyQa(true);
+  $('qaHistory').innerHTML = '';
+  showNote($('noteQa'), 'Запускаю построчный конвейер...');
+  const body = {
+    prompt,
+    input_file: inputFile,
+    output_file: outputFile,
+    new_chat: $('qaNewChat').checked,
+  };
+  const d = await api('/api/qa-file', body);
+  if (d.ok) {
+    const hist = d.history || [];
+    $('qaHistory').innerHTML = hist.map((it) =>
+      '<div class="chat-pair">' +
+      '<div class="chat-msg chat-q">' + escHtml(it.q) + '</div>' +
+      '<div class="chat-msg chat-a"><pre>' + escHtml(it.a) + '</pre></div>' +
+      '</div>').join('');
+    window.__lastHistory = hist;
+    const dl = d.download_url ? ` <a class="dl" href="${d.download_url}" target="_blank">⬇️ Скачать ответы</a>` : '';
+    showNote($('noteQa'), `✅ Готово: ${d.total} ответов → ${d.output_file}${dl}`);
+  } else {
+    showNote($('noteQa'), '❌ ' + (d.error || 'Ошибка'), true);
+  }
+  setBusyQa(false);
+}
+
 /* ================== Журнал ================== */
 async function refreshLogs() {
   const d = await api('/api/logs?limit=80', undefined, 'GET');
@@ -270,6 +307,12 @@ $('btnDisconnect').onclick = disconnect;
 $('btnSend').onclick = sendChat;
 $('btnMergeSend').onclick = mergeSend;
 $('btnMergeOnly').onclick = mergeOnly;
+$('btnQaRun').onclick = qaRun;
+$('btnQaCopy').onclick = () => {
+  const hist = window.__lastHistory || [];
+  const text = hist.map((it) => 'Вопрос: ' + it.q + '\n\nОтвет: ' + it.a).join('\n\n---\n\n');
+  if (text) navigator.clipboard.writeText(text).then(() => showNote($('noteQa'), 'История скопирована.'));
+};
 $('btnUsePrompt').onclick = useSelectedPrompt;
 $('btnResetPrompt').onclick = resetPromptToTdl;
 $('btnCopy').onclick = () => {
