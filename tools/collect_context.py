@@ -288,6 +288,9 @@ def collect_context(
             f"# Total files: {total_files}\n"
             f"# Total lines: {total_lines}\n"
             f"# Extensions: {ext_stats}\n"
+            f"# Max file size: {max_file_size:,} bytes\n"
+            f"# Skipped by size (> max): {total_skipped_size}\n"
+            f"# Skipped as temp (by name): {total_skipped_temp}\n"
             f"{'#' * 72}\n\n"
         )
         parts.append(summary)

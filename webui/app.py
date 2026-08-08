@@ -210,7 +210,11 @@ def _collect_context_to(directories, out_name: str, local_prompt: str = "",
     ptypes = None
     if project_type in ("cs", "py", "mixed"):
         ptypes = {str(Path(d).resolve()): project_type for d in paths}
-    res = collect_context(paths, output_file=out, add_task=True, add_summary=True,
+    # Если пользователь вставил свой промпт (local_prompt) — общее задание
+    # по умолчанию (prompts/general_task.txt) НЕ дублируется в файл.
+    res = collect_context(paths, output_file=out,
+                          add_task=not bool((local_prompt or "").strip()),
+                          add_summary=True,
                           local_prompt=local_prompt, project_types=ptypes)
     lg.log(f"📦 {res}")
     content = Path(out).read_text(encoding="utf-8", errors="replace")
@@ -254,11 +258,12 @@ def collect_to_file(directories, project_type: str = "auto",
 
     lg.log(f"🖨️ Копирование в один файл: {len(paths)} путей, тип={project_type} → {out_name}")
     from tools.collect_context import collect_context
+    # Если пользователь вставил свой промпт — default-задание не дублируется.
     res = collect_context(
         paths,
         output_file=out,
         project_types=project_types,
-        add_task=True,
+        add_task=not bool((local_prompt or "").strip()),
         add_summary=True,
         local_prompt=local_prompt,
     )
