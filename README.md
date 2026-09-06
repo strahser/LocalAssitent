@@ -432,6 +432,7 @@ markdown (`## Ответ N`). Утилитарный скрипт `qwen/client.p
 | `qwen_send_prompt.py` | Отправка промпта в текущую вкладку chat.qwen.ai: убирает блокирующий оверлей `.page-loading` (z=49), вставка nativeSetter, отправка, проверка очистки поля | `python scripts\qwen_send_prompt.py --file <файл задания>` (формат конвейера: строка 1 — путь ответа, строки 4+ — промпт) |
 | `qwen_wait_answer.py` | Ожидание стабилизации ответа (2 замера), распознавание «Сетевая ошибка» (код 3 → ретрай), опционально маркер конца | `python scripts\qwen_wait_answer.py --timeout 600 --marker КОНЕЦ_ТЗ` |
 | `qwen_read_all_answers.py` | Копирование ВСЕХ ответов через кнопки «Копировать» в один markdown | `python scripts\qwen_read_all_answers.py` |
+| `qwen_download_images.py` | Скачивание ВСЕХ изображений открытого чата в папку (имена unix-timestamp как у Qwen + `manifest_<ts>.json`; куки сессии, blob:/data: поддерживаются, браузер остаётся открыт) | `python scripts\qwen_download_images.py --output d:\Projects\Demiurges\assets\new` |
 
 **Скилл браузерного моста** (`heatloss-browser-bridge`) — в `.opencode\skills\heatloss-browser-bridge\SKILL.md`:
 роль «передача текста между проектом и Qwen», поток работы, обработка «Сетевой ошибки» (ретраи),
